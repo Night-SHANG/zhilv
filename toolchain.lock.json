@@ -1,0 +1,17 @@
+{
+  "godot_version": "4.6.1",
+  "release_tag": "4.6.1-stable",
+  "source": "https://api.github.com/repos/godotengine/godot-builds/releases/286976051/assets",
+  "platforms": {
+    "linux": {
+      "archive": "Godot_v4.6.1-stable_linux.x86_64.zip",
+      "executable": "Godot_v4.6.1-stable_linux.x86_64",
+      "sha256": "cecd0cb6b55e931318a9d7237dc4197d69ea914966787a454808523626e2789f"
+    },
+    "windows": {
+      "archive": "Godot_v4.6.1-stable_win64.exe.zip",
+      "executable": "Godot_v4.6.1-stable_win64_console.exe",
+      "sha256": "088da0457e2d1f7f8a45e6d4605a42b756ea33b9ccd75059bdbc01bb31c2b40d"
+    }
+  }
+}
