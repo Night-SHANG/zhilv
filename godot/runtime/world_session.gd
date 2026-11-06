@@ -279,3 +279,21 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 		if not result.ok:
 			return result
 	return _commit(stage, _terrain, _snapshot.actor.duplicate(true), changed)
+
+func _prepare_rule_revision(versions: Dictionary, snapshot: Dictionary) -> Dictionary:
+	## 可信宿主内部接口：规则运行时已完成引用/权限检查；材料能力保持原目录。
+	var catalog: Dictionary = _catalog.duplicate(true)
+	catalog.rules = versions.duplicate(true)
+	var valid: Dictionary = WorldCodec.decode_value(snapshot.duplicate(true), catalog)
+	if not valid.ok:
+		return valid
+	var store = Store.new(catalog)
+	var loaded: Dictionary = store.load_checkpoint(JSON.stringify(valid.snapshot.entities))
+	if not loaded.ok:
+		return loaded
+	return {"ok":true,"error":"","catalog":catalog,"snapshot":valid.snapshot,"store":store}
+
+func _adopt_rule_revision(prepared: Dictionary) -> void:
+	## 无通知提交。协调者在规则库也替换完成后才发reloaded，避免回调看到半成品。
+	_catalog = prepared.catalog.duplicate(true)
+	_adopt(prepared.snapshot, prepared.store)

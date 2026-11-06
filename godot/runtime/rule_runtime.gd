@@ -4,7 +4,9 @@ const Codec = preload("res://runtime/snapshot_codec.gd")
 const WorldCodec = preload("res://runtime/world_codec.gd")
 const Compiler = preload("res://runtime/rule_compiler.gd")
 const Evaluator = preload("res://runtime/rule_evaluator.gd")
+const Library = preload("res://runtime/rule_library.gd")
 var _catalog: Dictionary
+var _trusted_catalog: Dictionary
 var _world
 var _program: Dictionary = {}
 var _tick: int = 0
@@ -12,6 +14,7 @@ var _busy: bool = false
 
 func _init(catalog: Dictionary, world) -> void:
 	_catalog = catalog.duplicate(true)
+	_trusted_catalog = catalog.duplicate(true)
 	_world = world
 
 func _references(program: Dictionary, snapshot: Dictionary) -> Dictionary:
@@ -33,6 +36,10 @@ func install_pack(text: String) -> Dictionary:
 	if not refs.ok:
 		return refs
 	if not _program.is_empty():
+		# 旧的整包入口也不能通过先移除版本、再换内容绕过不可变约束。
+		for k in _program.modules:
+			if not candidate.modules.has(k):
+				return Codec.reject("installed_module_removal")
 		for k in candidate.modules:
 			if _program.modules.has(k) and _program.modules[k].canonical != candidate.modules[k].canonical:
 				return Codec.reject("version_content_conflict")
@@ -112,10 +119,10 @@ func validate_checkpoint(text: String) -> Dictionary:
 	var d: Variant = parser.data
 	if not Codec._shape(d, ["format", "tick", "world", "rules"]) or d.format != "rw.simulation/0.1" or not Codec._integer(d.tick, 0, Codec.MAX_QUANTITY):
 		return Codec.reject("simulation_fields")
-	var program: Dictionary = Compiler.compile_value(d.rules, _catalog)
+	var program: Dictionary = Library.compile_dynamic(d.rules, _trusted_catalog)
 	if not program.ok:
 		return program
-	var world: Dictionary = WorldCodec.decode_value(d.world, _catalog)
+	var world: Dictionary = WorldCodec.decode_value(d.world, program.catalog)
 	if not world.ok:
 		return world
 	var refs: Dictionary = _references(program, world.snapshot)
@@ -129,10 +136,104 @@ func load_checkpoint(text: String) -> Dictionary:
 	var candidate: Dictionary = validate_checkpoint(text)
 	if not candidate.ok:
 		return candidate
+	var prepared: Dictionary = _world._prepare_rule_revision(candidate.program.catalog.rules, candidate.world)
+	if not prepared.ok:
+		return prepared
+	return _adopt_revision(candidate.program, prepared, candidate.tick)
+
+func _prepare_publish(text: String, bindings: Dictionary) -> Dictionary:
+	if _busy:
+		return Codec.reject("runtime_busy")
+	if bindings.size() > 64:
+		return Codec.reject("binding_batch_budget")
+	var program: Dictionary = Library.merge_text(text, _program, _catalog)
+	if not program.ok:
+		return program
+	return _prepare_bindings(program, bindings)
+
+func _prepare_bindings(program: Dictionary, bindings: Dictionary) -> Dictionary:
+	var snapshot: Dictionary = _world.rule_view()
+	if snapshot.is_empty():
+		return Codec.reject("world_not_loaded")
+	for id in bindings:
+		if not Codec.identifier(id) or not bindings[id] is Array:
+			return Codec.reject("invalid_binding")
+		var access: Dictionary = _world._accessible_instance(id)
+		if not access.ok:
+			return access
+		for entity in snapshot.entities.instances:
+			if entity.id == id: entity.rules = bindings[id].duplicate(true)
+	var prepared: Dictionary = _world._prepare_rule_revision(program.catalog.rules, snapshot)
+	if not prepared.ok:
+		return prepared
+	var refs: Dictionary = _references(program, prepared.snapshot)
+	if not refs.ok:
+		return refs
+	return {"ok":true,"error":"","program":program,"prepared":prepared}
+
+func _adopt_revision(program: Dictionary, prepared: Dictionary, tick: int) -> Dictionary:
 	_busy = true
-	var result: Dictionary = _world.load_checkpoint(JSON.stringify(candidate.world))
-	if result.ok:
-		_program = candidate.program
-		_tick = candidate.tick
+	_world._adopt_rule_revision(prepared)
+	_catalog = prepared.catalog.duplicate(true)
+	_program = program
+	_tick = tick
+	_world.reloaded.emit()
 	_busy = false
+	return {"ok":true,"error":""}
+
+func preview_pack(text: String, bindings: Dictionary = {}) -> Dictionary:
+	var candidate: Dictionary = _prepare_publish(text,bindings)
+	if not candidate.ok:
+		return candidate
+	# 不泄露可修改的已编译程序/世界引用。
+	return {"ok":true,"error":"","added":candidate.program.added,"modules":candidate.program.modules.size(),"bindings":bindings.size()}
+
+func publish_pack(text: String, bindings: Dictionary = {}) -> Dictionary:
+	var candidate: Dictionary = _prepare_publish(text,bindings)
+	if not candidate.ok:
+		return candidate
+	return _adopt_revision(candidate.program,candidate.prepared,_tick)
+
+func bind_rules(id: String, refs: Array) -> Dictionary:
+	if _busy:
+		return Codec.reject("runtime_busy")
+	if _program.is_empty():
+		return Codec.reject("runtime_not_ready")
+	var program: Dictionary = _program.duplicate(true)
+	program["catalog"] = _catalog.duplicate(true)
+	var candidate: Dictionary = _prepare_bindings(program,{id:refs})
+	if not candidate.ok:
+		return candidate
+	return _adopt_revision(candidate.program,candidate.prepared,_tick)
+
+func export_rule(id: String, version: Variant) -> Dictionary:
+	return Library.export_scroll(_program,id,version)
+
+func import_scroll(text: String) -> Dictionary:
+	if _busy:
+		return Codec.reject("runtime_busy")
+	var parsed: Dictionary=Library.read_scroll(text,_catalog)
+	if not parsed.ok:
+		return parsed
+	var result: Dictionary=publish_pack(parsed.text)
+	if result.ok: result["entry"] = parsed.entry.duplicate(true)
 	return result
+
+func rule_definition(id: String, version: Variant) -> Dictionary:
+	if typeof(version)!=TYPE_INT or version<1 or version>2147483647 or not Codec.identifier(id):
+		return Codec.reject("invalid_rule_reference")
+	if not _program.is_empty():
+		for m in _program.source.modules:
+			if m.id==id and m.version==version:
+				return {"ok":true,"error":"","module":m.duplicate(true)}
+	return Codec.reject("missing_rule_version")
+
+func next_rule_version(id: String) -> Dictionary:
+	if not Codec.identifier(id) or not id.begins_with("user:"):
+		return Codec.reject("reserved_rule_namespace")
+	var maximum: int=0
+	for version in _catalog.rules.get(id,[]):
+		if Codec._integer(version,1,2147483647): maximum=maxi(maximum,int(version))
+	if maximum==2147483647:
+		return Codec.reject("rule_version_limit")
+	return {"ok":true,"error":"","version":maximum+1}

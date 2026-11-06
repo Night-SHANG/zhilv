@@ -45,12 +45,28 @@ night_light由is_night、bool、set_light三个节点构成；absorb通过call�
 
 规则包最多256KiB、64模块；每模块64节点、8参数、16动作；调用深度8。每实例最多64条命令。
 每实例指令预算1..4096，每步总预算1..65536；世界中带规则的活动实例最多256。预算是保护阈值，不是性能结论。
-相同id+version的定义不能在运行时被静默替换；改动须使用新版本并更新受信目录及绑定。
+相同id+version的定义不能在运行时被静默替换；改动须使用新版本并显式绑定；v0.10允许经编译校验的user:规则自动加入动态版本目录。
 完整存档rw.simulation/0.1包含tick、world、rules。沿用CheckpointFiles的原子替换和显式备份恢复。
-保存后没有后台执行；宿主加载后继续推进。完整昼夜时间、信号/邻格事件队列、跨版本迁移、动态编辑器仍未实现。
+保存后没有后台执行；宿主加载后继续推进。完整昼夜时间、信号/邻格事件队列、跨格式迁移、图形编辑器仍未实现；v0.10已实现非视觉草稿与发布服务。
 
 ## 验证与复用来源
 
 使用Godot JSON读取数据，并沿用项目已有严格词法/类型闸门；Godot自身的JSON解析并不等于完整的输入安全校验。
 文档参考：https://docs.godotengine.org/en/stable/classes/class_json.html
 继续复用原有Coheronia库存、格坐标模块与本项目WorldSession/CheckpointFiles；没有另建物理引擎、库存或图形框架。
+
+## v0.10 创作、版本与律卷
+
+RuleDraft是非视觉编辑模型：start建立草稿；upsert_node增改节点；connect_input/disconnect_input调整连线；set_parameter、set_effects设置参数和动作顺序。remove_node拒绝删除仍被引用的源节点，删除动作同时移除其执行入口。草稿支持临时缺线，预览/发布才执行完整编译；失败不触碰活动世界。snapshot返回副本，restore用于已有规范化模块副本，不将任意对象视为JSON。
+
+RuleRuntime.preview_pack(text, bindings)只返回校验摘要。publish_pack(text, bindings)合并新版本并可一次替换指定造物的全部绑定；最多64个绑定对象，任一访问/类型/依赖失败都不提交。bind_rules(id, refs)单独替换一个对象的绑定，空列表解绑，不清空状态。世界中的绑定仍受4格距离、遮挡限制；背包仅限当前角色所有。
+
+rule_definition返回已发布图的副本；next_rule_version返回可用后继版本。只有user:可以动态增加ID/版本；原语、材料目录、状态能力不由用户包定义。已发布同ID+版本内容不可改，旧install_pack也不能先忘记未绑定旧版本再替换。完整load_checkpoint是显式世界恢复，可恢复旧时间点；它仅由初始受信目录加存档中验证通过的图重建版本目录，不保留被恢复掉的临时版本。
+
+export_rule(id,version)返回纯JSON律卷rw.scroll/0.1：format、entry(id/version)、rules。只包含入口及其递归依赖，保持各版本准确固定。import_scroll要求自包含且不存在无关模块；先完整编译再合并，不改变任何造物绑定，也不执行动作。律卷不包含库存、地形、材料注册、文件路径或宿主脚本。依赖/同版本冲突应提示用户创建新版本/新ID，不自动改名或静默覆盖。
+
+发布、绑定及读档先准备所有状态，规则库、目录、世界采用完成后才发reloaded；通知期间禁止运行时重入。仍是单机同步调用，无多线程/多人写入协议。
+
+新版本仍用rw.simulation/0.1共同保存程序和世界；现有存档可继续读取。每库64个版本化模块的上限仍存在，未实现安全旧版本回收。RuleDraft另限制1024个数据值访问和10层嵌套；这不是最终内容数量承诺。
+
+原生可复现流程：test_draft.gd从空图经编辑操作创建夜灯、复制日灯新版本，再构造可参数化子模块及调用者；导出闭包、磁盘恢复后继续运行。test_authoring.gd另验证另一世界导入、显式绑定、拒绝非法包与访问、失败原子性。Python只核对固定预期工件，不复制第二套规则运行器。
