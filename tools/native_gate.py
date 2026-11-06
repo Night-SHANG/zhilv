@@ -45,7 +45,7 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         evidence.unlink(missing_ok=True)  # 仅删除本次输出，禁止旧证据蒙混过关。
         world_evidence.unlink(missing_ok=True)
         suites = []
-        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT')):
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT')):
             cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
                    '--script', 'res://tests/test_' + name + '.gd']
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
