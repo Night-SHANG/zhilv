@@ -1,7 +1,7 @@
 extends SceneTree
 ## 程序生成的中性测试图块，仅检查原生TileMapLayer同步，不是美术样板。
 const World = preload("res://runtime/world_session.gd")
-const Projection = preload("res://runtime/terrain_projection.gd")
+const TerrainProjectionScript = preload("res://runtime/terrain_projection.gd")
 var passed: int = 0
 var failed: int = 0
 
@@ -32,7 +32,7 @@ func _initialize() -> void:
 		tiles.add_source(atlas, id)
 	layer.tile_set = tiles
 	root.add_child(layer)
-	var p = Projection.new()
+	var p = TerrainProjectionScript.new()
 	var sources: Dictionary = {"core:stone": 0, "user:reservoir": 1}
 	var window := Rect2i(-8, 0, 16, 8)
 	check(p.bind_world(w, layer, sources, window).ok, "bind_real_tilemap")

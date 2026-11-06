@@ -22,7 +22,8 @@ func _initialize() -> void:
 	var catalog: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(root_path.path_join("catalog.json")))
 	var text: String = FileAccess.get_file_as_string(root_path.path_join("world_checkpoint.json"))
 	var w = World.new(catalog)
-	check(w.load_checkpoint(text).ok, "load_world_checkpoint")
+	var load_result: Dictionary = w.load_checkpoint(text)
+	check(load_result.ok, "load_world_checkpoint: " + str(load_result.error))
 	if failed > 0:
 		print("WORLD_TEST_RESULT: ", passed, " passed; ", failed, " failed")
 		quit(1)
