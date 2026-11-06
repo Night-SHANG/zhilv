@@ -27,30 +27,33 @@
 ## Task 1: 世界数据契约（独立校验）
 Files: fixtures/world_checkpoint.json, tools/check_world.py, tests/test_world_contract.py, godot/runtime/world_codec.gd.
 Interface: validate_world(text: str, catalog: dict)->dict；WorldCodec.decode(text:String,catalog:Dictionary)->Dictionary。
-- [ ] 先写非法版本/重复地形/角色穿墙/实例穿墙/未知材料/未知归属/负坐标等测试，观察本地失败。
-- [ ] 实现严格外层协议，复用已有实例校验；运行完整 Python 套件。
+- [x] 先写非法版本/重复地形/角色穿墙/实例穿墙/未知材料/未知归属/负坐标等测试，观察本地失败。
+- [x] 实现严格外层协议，复用已有实例校验；运行完整 Python 套件。
 
 ## Task 2: 原生交互事务
 Files: godot/runtime/world_session.gd, godot/tests/test_world.gd.
 Interface: load_checkpoint, validate_checkpoint, checkpoint_json, material_at, get_instance, stack_count, actor_cell;
 mine(cell), build(material_id,cell), pickup(id), place(id,cell), step_actor(delta), pour_water(source,target,amount)。所有结果含 ok/error；成功 emitted committed(cells:Array)。
-- [ ] 测试先入库；stub 拒绝 load，原生 CI 应有明确失败断言，而非漏跑。
-- [ ] 实现通用命令、距离/占位/遮挡，复用 InstanceStore 和 CheckpointFiles。
-- [ ] 保留状态和规则版本的拾取→磁盘保存→重载→放置闭环；事务失败前后快照完全相同。
+- [x] 测试先入库；stub 拒绝 load，原生 CI 应有明确失败断言，而非漏跑。
+- [x] 实现通用命令、距离/占位/遮挡，复用 InstanceStore 和 CheckpointFiles。
+- [x] 保留状态和规则版本的拾取→磁盘保存→重载→放置闭环；事务失败前后快照完全相同。
 
 ## Task 3: TileMapLayer 接入与证据
 Files: godot/runtime/terrain_projection.gd, godot/tests/test_projection.gd, tools/native_gate.py.
-Interface: projection.bind(world,layer,sources)->Dictionary；projection.rebuild()->Dictionary；dispose()。
-- [ ] 用中性程序图块在 headless 环境构建原生 TileSet，不制作正式美术/UI。
-- [ ] 验证成功修改投影、失败不改、重载同步、缺失映射拒绝、远坐标不被静默环绕。
-- [ ] 新原生输出通过独立 Python world 协议回读；任何原生失败阻断 PASS。
+Interface: projection.bind_world(world,layer,sources,window:Rect2i)->Dictionary；projection.rebuild()->Dictionary；dispose()。
+- [x] 用中性程序图块在 headless 环境构建原生 TileSet，不制作正式美术/UI。
+- [x] 验证成功修改投影、失败不改、重载同步、缺失映射拒绝、远坐标不被静默环绕。
+- [x] 新原生输出通过独立 Python world 协议回读；任何原生失败阻断 PASS。
 
 ## Task 4: 审查与提交
-- [ ] 全套离线/原生检查、上游哈希、diff、残留/密钥检查。
-- [ ] 更新 README/STATUS/Notion，清楚区分已通过的旧提交和待确认的新提交。
-- [ ] 原分支提交、更新草稿PR、触发跨平台CI；不重复无意义轮询、不声称游戏完成。
+- [x] 离线67项、上游哈希、diff与静态审查；4adff9d原生110项通过。满库存回归修复的最终CI另行核验。
+- [x] 更新 README/STATUS/Notion，清楚区分已通过的旧提交和待确认的新提交。
+- [x] 原分支提交、更新草稿PR、触发跨平台CI；不重复无意义轮询、不声称游戏完成。
 
 ## 执行记录
 - 基线：远端6d15b0a的Windows/Linux原生任务已成功；Linux日志含8个上游断言、38个生命周期断言。
 - 本地从已交付ZIP恢复，git根树与远端3e3a4b24d4c83cc939f4fcbe766799b12a78a0ff一致；49项Python基线通过。
 - 本地网络DNS仍不可用，原生新代码运行需要GitHub CI，不把静态审查写成执行结果。
+
+- 世界与投影通过后的复查增加满库存种类回归，CI已复现失败；最小修复是验证成功后才访问snapshot。原生最终状态必须与最后提交绑定。
+- 计划中主要实现已完成；没有把规则执行、角色平台物理、无限地图或美术验收标记为完成。

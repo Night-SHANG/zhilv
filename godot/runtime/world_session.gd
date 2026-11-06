@@ -118,7 +118,10 @@ func _commit(stage, terrain: Dictionary, actor: Dictionary, changed: Array) -> D
 	positions.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
 	for cell: Vector2i in positions:
 		tiles.append({"cell": [cell.x, cell.y], "material_id": terrain[cell]})
-	var candidate: Dictionary = {"format": "rw.world/0.1", "entities": stage.validate_checkpoint(stage.checkpoint_json()).snapshot, "terrain": tiles, "actor": actor}
+	var normalized: Dictionary = stage.validate_checkpoint(stage.checkpoint_json())
+	if not normalized.ok:
+		return normalized
+	var candidate: Dictionary = {"format": "rw.world/0.1", "entities": normalized.snapshot, "terrain": tiles, "actor": actor}
 	var valid: Dictionary = validate_checkpoint(JSON.stringify(candidate))
 	if not valid.ok:
 		return valid
