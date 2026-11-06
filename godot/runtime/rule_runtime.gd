@@ -4,6 +4,7 @@ const Codec = preload("res://runtime/snapshot_codec.gd")
 const WorldCodec = preload("res://runtime/world_codec.gd")
 const Compiler = preload("res://runtime/rule_compiler.gd")
 const Evaluator = preload("res://runtime/rule_evaluator.gd")
+const WorldSession = preload("res://runtime/world_session.gd")
 const Library = preload("res://runtime/rule_library.gd")
 var _catalog: Dictionary
 var _trusted_catalog: Dictionary
@@ -11,6 +12,7 @@ var _world
 var _program: Dictionary = {}
 var _tick: int = 0
 var _busy: bool = false
+var _clock: Dictionary = {}
 
 func _init(catalog: Dictionary, world) -> void:
 	_catalog = catalog.duplicate(true)
@@ -50,6 +52,7 @@ func pack_json() -> String:
 	return "{}" if _program.is_empty() else JSON.stringify(_program.source)
 
 func advance(night: Variant, per_instance_budget: Variant = 512, total_budget: Variant = 32768) -> Dictionary:
+	if not _clock.is_empty(): return Codec.reject("clock_requires_fixed_tick")
 	if _busy:
 		return Codec.reject("runtime_busy")
 	if typeof(night) != TYPE_BOOL or typeof(per_instance_budget) != TYPE_INT or per_instance_budget < 1 or per_instance_budget > 4096 or typeof(total_budget) != TYPE_INT or total_budget < 1 or total_budget > 65536:
@@ -68,7 +71,12 @@ func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dicti
 	var refs: Dictionary = _references(_program, snapshot)
 	if not refs.ok:
 		return refs
-	var view: Dictionary = {"instances": {}, "cells": {}}
+	var view: Dictionary = {"instances": {}, "cells": {}, "water":{}, "roofs":{}}
+	for entry in snapshot.get("water",[]):
+		view.water[Vector2i(entry.cell[0],entry.cell[1])] = entry.units
+	for tile in snapshot.terrain:
+		var x: int = tile.cell[0]
+		view.roofs[x] = mini(int(view.roofs.get(x,1000001)),int(tile.cell[1]))
 	var active: Array = []
 	for entity in snapshot.entities.instances:
 		view.instances[entity.id] = entity
@@ -105,9 +113,16 @@ func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dicti
 	return {"ok": true, "error": "", "tick": _tick, "instructions": spent, "committed": committed, "errors": errors}
 
 func checkpoint_json() -> String:
+	return JSON.stringify(checkpoint_value())
+
+func checkpoint_value() -> Dictionary:
 	if _program.is_empty() or _world.rule_view().is_empty():
-		return "{}"
-	return JSON.stringify({"format": "rw.simulation/0.1", "tick": _tick, "world": _world.rule_view(), "rules": _program.source})
+		return {}
+	var data: Dictionary = {"format": "rw.simulation/0.1", "tick": _tick, "world": _world.rule_view(), "rules": _program.source}
+	if not _clock.is_empty():
+		data.format = "rw.simulation/0.2"
+		data["clock"] = _clock.duplicate()
+	return data.duplicate(true)
 
 func validate_checkpoint(text: String) -> Dictionary:
 	var lexical: String = Codec._lexical_error(text)
@@ -116,8 +131,18 @@ func validate_checkpoint(text: String) -> Dictionary:
 	var parser := JSON.new()
 	if parser.parse(text) != OK:
 		return Codec.reject("invalid_simulation_json")
-	var d: Variant = parser.data
-	if not Codec._shape(d, ["format", "tick", "world", "rules"]) or d.format != "rw.simulation/0.1" or not Codec._integer(d.tick, 0, Codec.MAX_QUANTITY):
+	return validate_checkpoint_value(parser.data)
+
+func validate_checkpoint_value(d: Variant) -> Dictionary:
+	## 内部入口只处理已通过外层词法预算闸门的JSON值。
+	if not d is Dictionary: return Codec.reject("simulation_fields")
+	var fields: Array = ["format","tick","world","rules"]
+	var clock: Dictionary = {}
+	if d.get("format") == "rw.simulation/0.2":
+		fields.append("clock")
+		if not _valid_clock(d.get("clock")): return Codec.reject("clock_fields")
+		clock = {"cycle_ticks":int(d.clock.cycle_ticks),"daylight_ticks":int(d.clock.daylight_ticks),"paused":d.clock.paused}
+	if not Codec._shape(d, fields) or not d.format in ["rw.simulation/0.1","rw.simulation/0.2"] or not Codec._integer(d.tick, 0, Codec.MAX_QUANTITY):
 		return Codec.reject("simulation_fields")
 	var program: Dictionary = Library.compile_dynamic(d.rules, _trusted_catalog)
 	if not program.ok:
@@ -128,7 +153,7 @@ func validate_checkpoint(text: String) -> Dictionary:
 	var refs: Dictionary = _references(program, world.snapshot)
 	if not refs.ok:
 		return refs
-	return {"ok": true, "error": "", "program": program, "world": world.snapshot, "tick": int(d.tick)}
+	return {"ok": true, "error": "", "program": program, "world": world.snapshot, "tick": int(d.tick), "clock":clock}
 
 func load_checkpoint(text: String) -> Dictionary:
 	if _busy:
@@ -139,7 +164,7 @@ func load_checkpoint(text: String) -> Dictionary:
 	var prepared: Dictionary = _world._prepare_rule_revision(candidate.program.catalog.rules, candidate.world)
 	if not prepared.ok:
 		return prepared
-	return _adopt_revision(candidate.program, prepared, candidate.tick)
+	return _adopt_revision(candidate.program, prepared, candidate.tick, candidate.clock)
 
 func _prepare_publish(text: String, bindings: Dictionary) -> Dictionary:
 	if _busy:
@@ -171,12 +196,13 @@ func _prepare_bindings(program: Dictionary, bindings: Dictionary) -> Dictionary:
 		return refs
 	return {"ok":true,"error":"","program":program,"prepared":prepared}
 
-func _adopt_revision(program: Dictionary, prepared: Dictionary, tick: int) -> Dictionary:
+func _adopt_revision(program: Dictionary, prepared: Dictionary, tick: int, clock_override: Variant = null) -> Dictionary:
 	_busy = true
 	_world._adopt_rule_revision(prepared)
 	_catalog = prepared.catalog.duplicate(true)
 	_program = program
 	_tick = tick
+	if clock_override != null: _clock = clock_override.duplicate()
 	_world.reloaded.emit()
 	_busy = false
 	return {"ok":true,"error":""}
@@ -237,3 +263,65 @@ func next_rule_version(id: String) -> Dictionary:
 	if maximum==2147483647:
 		return Codec.reject("rule_version_limit")
 	return {"ok":true,"error":"","version":maximum+1}
+
+static func _valid_clock(value: Variant) -> bool:
+	return Codec._shape(value,["cycle_ticks","daylight_ticks","paused"]) and Codec._integer(value.cycle_ticks,2,1000000) and Codec._integer(value.daylight_ticks,1,int(value.cycle_ticks)-1) and typeof(value.paused)==TYPE_BOOL
+
+func configure_clock(cycle_ticks: Variant, daylight_ticks: Variant) -> Dictionary:
+	if _busy: return Codec.reject("runtime_busy")
+	var clock: Dictionary = {"cycle_ticks":cycle_ticks,"daylight_ticks":daylight_ticks,"paused":false}
+	if typeof(cycle_ticks)!=TYPE_INT or typeof(daylight_ticks)!=TYPE_INT or not _valid_clock(clock): return Codec.reject("invalid_clock")
+	_clock = clock
+	return {"ok":true,"error":""}
+
+func clock_state() -> Dictionary:
+	if _clock.is_empty(): return {}
+	var state: Dictionary = _clock.duplicate()
+	state["tick"] = _tick
+	# tick是已完成步数；公开的昼夜应与刚提交的规则状态一致，而非提前显示下一步。
+	state["night"] = maxi(0,_tick-1) % _clock.cycle_ticks >= _clock.daylight_ticks
+	return state
+
+func set_paused(value: Variant) -> Dictionary:
+	if _busy: return Codec.reject("runtime_busy")
+	if typeof(value)!=TYPE_BOOL or _clock.is_empty(): return Codec.reject("invalid_pause")
+	_clock.paused = value
+	return {"ok":true,"error":""}
+
+func advance_tick(per_instance_budget: Variant=512, total_budget: Variant=32768, water_budget: Variant=65536) -> Dictionary:
+	return _timed_step(false,per_instance_budget,total_budget,water_budget)
+
+func single_step(per_instance_budget: Variant=512, total_budget: Variant=32768, water_budget: Variant=65536) -> Dictionary:
+	return _timed_step(true,per_instance_budget,total_budget,water_budget)
+
+func _timed_step(force: bool, per_instance_budget: Variant, total_budget: Variant, water_budget: Variant) -> Dictionary:
+	if _busy: return Codec.reject("runtime_busy")
+	if _clock.is_empty() or _program.is_empty() or _world.rule_view().is_empty(): return Codec.reject("clock_runtime_not_ready")
+	if _clock.paused and not force: return {"ok":true,"error":"","tick":_tick,"paused":true}
+	# 在同类型候选世界里运行规则与水，全部成功才公开。不是第二个持久世界。
+	var shadow_world = WorldSession.new(_catalog)
+	var loaded: Dictionary = shadow_world.load_checkpoint(_world.checkpoint_json())
+	if not loaded.ok: return loaded
+	var shadow = get_script().new(_catalog,shadow_world)
+	shadow._program = _program
+	shadow._tick = _tick
+	_busy = true
+	var night: bool = _tick % _clock.cycle_ticks >= _clock.daylight_ticks
+	var result: Dictionary = shadow.advance(night,per_instance_budget,total_budget)
+	if not result.ok:
+		_busy = false
+		return result
+	var fluid: Dictionary = {"ok":true,"error":"","operations":0,"changed":0}
+	if shadow_world.rule_view().format == "rw.world/0.2": fluid = shadow_world.advance_water(water_budget)
+	if not fluid.ok:
+		_busy = false
+		return fluid
+	var prepared: Dictionary = _world._prepare_rule_revision(_catalog.rules,shadow_world.rule_view())
+	if not prepared.ok:
+		_busy = false
+		return prepared
+	_adopt_revision(_program,prepared,shadow._tick)
+	result["night"] = night
+	result["water_operations"] = fluid.operations
+	result["water_changed"] = fluid.changed
+	return result

@@ -5,7 +5,7 @@ const MAX_BYTES: int = 262144
 const MAX_MODULES: int = 64
 const MAX_NODES: int = 64
 const MAX_DEPTH: int = 8
-const EFFECTS: Array = ["set_light", "move", "take_water", "call"]
+const EFFECTS: Array = ["set_light", "move", "take_water", "take_environment_water", "release_environment_water", "call"]
 
 static func key(id: String, version: int) -> String:
 	return id + "@" + str(version)
@@ -175,12 +175,13 @@ static func signature(n: Dictionary, m: Dictionary, modules: Dictionary, catalog
 			if not Codec._shape(c, ["material"]) or not c.material is String or (c.material != "" and not catalog.materials.has(c.material)):
 				return Codec.reject("unknown_neighbor_material")
 			output = "ref"
-		"move":
+		"move", "release_environment_water":
 			if not Codec._shape(c, ["dx", "dy"]) or not Codec._integer(c.dx, -1, 1) or not Codec._integer(c.dy, -1, 1) or absi(int(c.dx)) + absi(int(c.dy)) != 1:
 				return Codec.reject("invalid_move_step")
 			c.dx = int(c.dx)
 			c.dy = int(c.dy)
 			inputs = {"when": "bool"}
+			if n.op == "release_environment_water": inputs["amount"] = "int"
 			output = "effect"
 		"call":
 			if not Codec._shape(c, ["id", "version"]) or not Codec.identifier(c.id) or not Codec._integer(c.version, 1, 2147483647):
@@ -197,7 +198,7 @@ static func signature(n: Dictionary, m: Dictionary, modules: Dictionary, catalog
 			if not c.is_empty():
 				return Codec.reject("unexpected_node_config")
 			match n.op:
-				"is_night":
+				"is_night", "is_ambient_dark":
 					output = "bool"
 				"exists":
 					output = "bool"
@@ -208,12 +209,20 @@ static func signature(n: Dictionary, m: Dictionary, modules: Dictionary, catalog
 				"and":
 					output = "bool"
 					inputs = {"a": "bool", "b": "bool"}
-				"lt", "add":
-					output = "int" if n.op == "add" else "bool"
+				"lt", "add", "sub", "min":
+					output = "bool" if n.op == "lt" else "int"
 					inputs = {"a": "int", "b": "int"}
 				"set_light":
 					output = "effect"
 					inputs = {"when": "bool", "value": "bool"}
+				"neighbor_water":
+					output = "cell_ref"
+				"water_exists", "water_units":
+					output = "bool" if n.op == "water_exists" else "int"
+					inputs = {"source":"cell_ref"}
+				"take_environment_water":
+					output = "effect"
+					inputs = {"when":"bool","source":"cell_ref","amount":"int"}
 				"take_water":
 					output = "effect"
 					inputs = {"when": "bool", "source": "ref", "amount": "int"}

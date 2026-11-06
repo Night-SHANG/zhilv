@@ -112,3 +112,20 @@ func move_world(id: String, cell: Vector2i) -> Dictionary:
 			return Codec.reject("occupied_cell")
 	entity.location.cell = [cell.x, cell.y]
 	return {"ok": true, "error": ""}
+
+func _change_water(id: String, delta: Variant) -> Dictionary:
+	## 仅供世界事务调入；环境一端也必须同步更新，不能向玩家规则暴露凭空加水。
+	var entity: Dictionary = _entity(id)
+	if entity.is_empty() or typeof(delta) != TYPE_INT or delta < -Codec.MAX_QUANTITY or delta > Codec.MAX_QUANTITY:
+		return Codec.reject("invalid_water_change")
+	var next: int = entity.state.water_units + delta
+	if next < 0 or next > entity.state.capacity_units:
+		return Codec.reject("insufficient_water_or_capacity")
+	entity.state.water_units = next
+	return {"ok":true,"error":""}
+
+func instance_at(cell: Vector2i) -> String:
+	for entity in _state.get("instances",[]):
+		if entity.location.kind == "world" and Vector2i(entity.location.cell[0],entity.location.cell[1]) == cell:
+			return entity.id
+	return ""

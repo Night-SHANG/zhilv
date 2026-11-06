@@ -6,6 +6,8 @@ var _modules: Dictionary
 var _entity: Dictionary
 var _cells: Dictionary
 var _instances: Dictionary
+var _water: Dictionary
+var _roofs: Dictionary
 var _night: bool
 var _budget: int
 var _spent: int = 0
@@ -19,6 +21,8 @@ func run(program: Dictionary, entity: Dictionary, view: Dictionary, night: bool,
 	_entity = entity
 	_cells = view.cells
 	_instances = view.instances
+	_water = view.get("water",{})
+	_roofs = view.get("roofs",{})
 	_night = night
 	_budget = budget
 	_spent = 0
@@ -76,6 +80,16 @@ func _execute(module_key: String, overrides: Dictionary, depth: int) -> void:
 					_error = "missing_target_or_invalid_amount"
 					return
 				_commands.append({"op": "take_water", "source": args.source, "amount": args.amount})
+			"take_environment_water":
+				if not args.source is Vector2i or args.amount <= 0:
+					_error = "missing_water_cell_or_invalid_amount"
+					return
+				_commands.append({"op":"take_environment_water","cell":args.source,"amount":args.amount})
+			"release_environment_water":
+				if args.amount <= 0:
+					_error = "invalid_water_amount"
+					return
+				_commands.append({"op":"release_environment_water","dx":n.config.dx,"dy":n.config.dy,"amount":args.amount})
 			"call":
 				_execute(Compiler.key(n.config.id, n.config.version), args, depth + 1)
 		if _commands.size() > 64:
@@ -104,6 +118,19 @@ func _value(module_key: String, id: String, parameters: Dictionary, cache: Dicti
 			value = parameters[n.config.name]
 		"is_night":
 			value = _night
+		"is_ambient_dark":
+			value = _night or int(_roofs.get(int(_entity.location.cell[0]),1000001)) < int(_entity.location.cell[1])
+		"neighbor_water":
+			value = null
+			var cell := Vector2i(_entity.location.cell[0],_entity.location.cell[1])
+			for offset in [Vector2i.UP,Vector2i.RIGHT,Vector2i.DOWN,Vector2i.LEFT]:
+				if int(_water.get(cell+offset,0)) > 0:
+					value = cell+offset
+					break
+		"water_exists":
+			value = args.source is Vector2i
+		"water_units":
+			value = int(_water.get(args.source,0)) if args.source is Vector2i else 0
 		"read_state":
 			value = _entity.state[n.config.field]
 		"neighbor":
@@ -123,8 +150,10 @@ func _value(module_key: String, id: String, parameters: Dictionary, cache: Dicti
 			value = args.a and args.b
 		"lt":
 			value = args.a < args.b
-		"add":
-			value = args.a + args.b
+		"min":
+			value = mini(args.a,args.b)
+		"add", "sub":
+			value = args.a + args.b if n.op == "add" else args.a - args.b
 			if value < -Codec.MAX_QUANTITY or value > Codec.MAX_QUANTITY:
 				_error = "arithmetic_range"
 		_:

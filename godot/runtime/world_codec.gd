@@ -3,6 +3,9 @@ extends RefCounted
 const Codec = preload("res://runtime/snapshot_codec.gd")
 const MAX_TERRAIN: int = 16384
 const COORD_LIMIT: int = 1000000
+const MAX_WATER: int = 4096
+const CELL_WATER_CAPACITY: int = 1000
+const DEEP_WATER: int = 200
 
 static func cell_valid(value: Variant) -> bool:
 	return value is Array and value.size() == 2 and Codec._integer(value[0], -COORD_LIMIT, COORD_LIMIT) and Codec._integer(value[1], -COORD_LIMIT, COORD_LIMIT)
@@ -21,7 +24,12 @@ static func decode(text: String, catalog: Dictionary) -> Dictionary:
 
 static func decode_value(d: Variant, catalog: Dictionary) -> Dictionary:
 	# 内部入口：原文词法闸门由外层信封统一执行。
-	if not Codec._shape(d, ["format", "entities", "terrain", "actor"]) or d.format != "rw.world/0.1":
+	if not d is Dictionary:
+		return Codec.reject("world_format_or_fields")
+	var environment: bool = d.get("format") == "rw.world/0.2"
+	var fields: Array = ["format", "entities", "terrain", "actor"]
+	if environment: fields.append("water")
+	if not Codec._shape(d, fields) or not d.format in ["rw.world/0.1", "rw.world/0.2"]:
 		return Codec.reject("world_format_or_fields")
 	var nested: Dictionary = Codec._decode_parsed(d.entities, catalog)
 	if not nested.ok:
@@ -57,4 +65,18 @@ static func decode_value(d: Variant, catalog: Dictionary) -> Dictionary:
 			return Codec.reject("unknown_inventory_owner")
 	if occupied.has(foot) or occupied.has(foot + Vector2i.UP):
 		return Codec.reject("actor_overlap")
+	if environment:
+		if not d.water is Array or d.water.size() > MAX_WATER:
+			return Codec.reject("water_collection_budget")
+		var water_cells: Dictionary = {}
+		for entry in d.water:
+			if not Codec._shape(entry, ["cell", "units"]) or not cell_valid(entry.cell) or not Codec._integer(entry.units, 1, CELL_WATER_CAPACITY):
+				return Codec.reject("invalid_water_entry")
+			var cell := Vector2i(int(entry.cell[0]), int(entry.cell[1]))
+			if occupied.has(cell) or water_cells.has(cell):
+				return Codec.reject("water_overlap")
+			water_cells[cell] = true
+			entry.cell = [cell.x, cell.y]
+			entry.units = int(entry.units)
+		d.water.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.cell[1] < b.cell[1] or (a.cell[1] == b.cell[1] and a.cell[0] < b.cell[0]))
 	return {"ok": true, "error": "", "snapshot": d}

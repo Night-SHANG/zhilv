@@ -70,3 +70,9 @@ export_rule(id,version)返回纯JSON律卷rw.scroll/0.1：format、entry(id/vers
 新版本仍用rw.simulation/0.1共同保存程序和世界；现有存档可继续读取。每库64个版本化模块的上限仍存在，未实现安全旧版本回收。RuleDraft另限制1024个数据值访问和10层嵌套；这不是最终内容数量承诺。
 
 原生可复现流程：test_draft.gd从空图经编辑操作创建夜灯、复制日灯新版本，再构造可参数化子模块及调用者；导出闭包、磁盘恢复后继续运行。test_authoring.gd另验证另一世界导入、显式绑定、拒绝非法包与访问、失败原子性。Python只核对固定预期工件，不复制第二套规则运行器。
+
+## v0.11 环境原语与计时补充
+
+环境水不是造物实例，使用独立类型`cell_ref`：`neighbor_water`→`water_exists`/`water_units`→`take_environment_water`；`release_environment_water`按固定相邻方向排水。`sub/min`用于通用容量限量；`is_ambient_dark`判断天光/顶上遮挡。它们复用原图编译、预算、版本不可变及律卷机制，不是新的配方运行时。
+
+设置时钟后用`advance_tick`，不再用外部布尔`advance`绕过昼夜；simulation0.2保存clock，0.1仍兼容无时钟历史档。每tick规则先读取同一快照、按稳定ID提交到暂存世界，再流动水；全局失败不推进tick。`clock_state.night`对应最后完成的步，而不是下一步相位。完整契约与非目标见`ENVIRONMENT.md`。

@@ -1,4 +1,4 @@
-"""rw.world/0.1 独立协议回读；不模拟 Godot 物理或交互行为。"""
+"""rw.world/0.1 与 0.2 独立协议回读；不模拟 Godot 物理或交互行为。"""
 from __future__ import annotations
 import json
 from check_snapshot import exact, ident, integer, parse_bounded, require, validate
@@ -17,8 +17,11 @@ def cell(value, where: str) -> tuple[int, int]:
 def validate_world(text: str, catalog: dict) -> dict:
     """只在完整验证后返回独立解码结果；未知版本不会静默降级。"""
     d = parse_bounded(text)
-    exact(d, {'format', 'entities', 'terrain', 'actor'}, 'world')
-    require(d['format'] == 'rw.world/0.1', '不支持的世界版本')
+    require(type(d) is dict and d.get('format') in ('rw.world/0.1', 'rw.world/0.2'), '不支持的世界版本')
+    fields = {'format', 'entities', 'terrain', 'actor'}
+    if d['format'] == 'rw.world/0.2':
+        fields.add('water')
+    exact(d, fields, 'world')
     entities = validate(json.dumps(d['entities'], ensure_ascii=False), catalog)
     exact(d['actor'], {'id', 'cell'}, 'actor')
     ident(d['actor']['id'], 'actor.id')
@@ -44,4 +47,14 @@ def validate_world(text: str, catalog: dict) -> dict:
         else:
             require(loc['owner'] == d['actor']['id'], '单角色世界中存在其他库存归属')
     require(foot not in occupied and head not in occupied, '角色与实体/地形重叠')
+    if d['format'] == 'rw.world/0.2':
+        require(type(d['water']) is list and len(d['water']) <= 4096, '水层类型/预算错误')
+        seen_water = set()
+        for entry in d['water']:
+            exact(entry, {'cell', 'units'}, 'water.entry')
+            pos = cell(entry['cell'], 'water.cell')
+            integer(entry['units'], 1, 1000, 'water.units')
+            require(pos not in occupied and pos not in seen_water, '水与实体/地形或其他水格重叠')
+            seen_water.add(pos)
+        # 允许角色暂时处在洪水中；不能因加载器禁止此状态而丢失可恢复存档。
     return d
