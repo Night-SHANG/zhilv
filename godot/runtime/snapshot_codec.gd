@@ -21,6 +21,13 @@ static func identifier(value: Variant) -> bool:
 	regex.compile("^[a-z][a-z0-9_.-]*:[A-Za-z0-9_.-]{1,64}\\z")
 	return regex.search(value) != null
 
+static func has_version(versions: Array, version: int) -> bool:
+	# Array.has按Variant类型比较；JSON版本是float，原生注册版本是int。
+	for candidate in versions:
+		if _integer(candidate, 1, 2147483647) and int(candidate) == version:
+			return true
+	return false
+
 static func _integer(value: Variant, lo: int, hi: int) -> bool:
 	# Godot JSON 将数字解码为 float；词法层先拒绝小数/指数，随后检查数值范围。
 	if typeof(value) != TYPE_INT and typeof(value) != TYPE_FLOAT:
@@ -143,7 +150,7 @@ static func _decode_parsed(d: Variant, catalog: Dictionary) -> Dictionary:
 			if not _shape(ref, ["id", "version"]) or not identifier(ref.id) or not _integer(ref.version, 1, 2147483647):
 				return reject("invalid_rule_reference")
 			var versions: Variant = catalog.rules.get(ref.id)
-			if not versions is Array or not ref.version in versions or used_rules.has(ref.id):
+			if not versions is Array or not has_version(versions, int(ref.version)) or used_rules.has(ref.id):
 				return reject("missing_or_duplicate_rule")
 			used_rules[ref.id] = true
 			ref.version = int(ref.version)

@@ -93,3 +93,22 @@ func change_stack(id: String, delta: Variant) -> Dictionary:
 	else:
 		_inventory.remove(id, -delta)
 	return {"ok": true, "error": ""}
+
+func set_light(id: String, value: Variant) -> Dictionary:
+	var entity: Dictionary = _entity(id)
+	if entity.is_empty() or typeof(value) != TYPE_BOOL:
+		return Codec.reject("invalid_light_change")
+	entity.state.light_on = value
+	return {"ok": true, "error": ""}
+
+func move_world(id: String, cell: Vector2i) -> Dictionary:
+	var entity: Dictionary = _entity(id)
+	if entity.is_empty() or entity.location.kind != "world":
+		return Codec.reject("not_in_world")
+	if cell.x < -1000000 or cell.x > 1000000 or cell.y < -1000000 or cell.y > 1000000:
+		return Codec.reject("coordinate_range")
+	for other in _state.instances:
+		if other.id != id and other.location.kind == "world" and Vector2i(other.location.cell[0], other.location.cell[1]) == cell:
+			return Codec.reject("occupied_cell")
+	entity.location.cell = [cell.x, cell.y]
+	return {"ok": true, "error": ""}

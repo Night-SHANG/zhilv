@@ -17,7 +17,10 @@ static func decode(text: String, catalog: Dictionary) -> Dictionary:
 	var parser := JSON.new()
 	if parser.parse(text) != OK:
 		return Codec.reject("invalid_json")
-	var d: Variant = parser.data
+	return decode_value(parser.data, catalog)
+
+static func decode_value(d: Variant, catalog: Dictionary) -> Dictionary:
+	# 内部入口：原文词法闸门由外层信封统一执行。
 	if not Codec._shape(d, ["format", "entities", "terrain", "actor"]) or d.format != "rw.world/0.1":
 		return Codec.reject("world_format_or_fields")
 	var nested: Dictionary = Codec._decode_parsed(d.entities, catalog)

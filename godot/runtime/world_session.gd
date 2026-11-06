@@ -224,3 +224,58 @@ func pour_water(source: String, target: String, amount: Variant) -> Dictionary:
 
 func material_ids() -> Array:
 	return _catalog.materials.keys()
+
+func rule_view() -> Dictionary:
+	# 调用者只能得到副本；运行时不得修改权威世界的数据引用。
+	return _snapshot.duplicate(true)
+
+func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
+	var source: Dictionary = get_instance(self_id)
+	if source.is_empty() or source.location.kind != "world":
+		return Codec.reject("rule_owner_not_in_world")
+	if not commands is Array or commands.size() > 64:
+		return Codec.reject("command_budget_or_type")
+	if commands.is_empty():
+		return {"ok": true, "error": ""}
+	var stage = _staged_store()
+	var changed: Array = []
+	for command in commands:
+		if not command is Dictionary or not command.get("op") is String:
+			return Codec.reject("invalid_rule_command")
+		var entity: Dictionary = stage.get_instance(self_id)
+		var cell := Vector2i(entity.location.cell[0], entity.location.cell[1])
+		if not changed.has(cell):
+			changed.append(cell)
+		var result: Dictionary
+		match command.op:
+			"set_light":
+				if not Codec._shape(command, ["op", "value"]):
+					return Codec.reject("light_command_fields")
+				result = stage.set_light(self_id, command.value)
+			"move":
+				if not Codec._shape(command, ["op", "dx", "dy"]) or typeof(command.dx) != TYPE_INT or typeof(command.dy) != TYPE_INT or command.dx < -1 or command.dx > 1 or command.dy < -1 or command.dy > 1 or absi(command.dx) + absi(command.dy) != 1:
+					return Codec.reject("invalid_rule_move")
+				var target: Vector2i = cell + Vector2i(command.dx, command.dy)
+				if _terrain.has(target) or _actor_at(target):
+					return Codec.reject("rule_move_collision")
+				result = stage.move_world(self_id, target)
+				if not changed.has(target):
+					changed.append(target)
+			"take_water":
+				if not Codec._shape(command, ["op", "source", "amount"]) or not command.source is String:
+					return Codec.reject("water_command_fields")
+				var donor: Dictionary = stage.get_instance(command.source)
+				if donor.is_empty() or donor.location.kind != "world":
+					return Codec.reject("rule_source_not_in_world")
+				var donor_cell := Vector2i(donor.location.cell[0], donor.location.cell[1])
+				var delta: Vector2i = donor_cell - cell
+				if absi(delta.x) + absi(delta.y) != 1:
+					return Codec.reject("rule_source_not_adjacent")
+				result = stage.transfer_water(command.source, self_id, command.amount)
+				if not changed.has(donor_cell):
+					changed.append(donor_cell)
+			_:
+				return Codec.reject("forbidden_rule_command")
+		if not result.ok:
+			return result
+	return _commit(stage, _terrain, _snapshot.actor.duplicate(true), changed)

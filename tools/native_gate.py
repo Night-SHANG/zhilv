@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from check_snapshot import validate, ValidationError
 from check_world import validate_world
+from check_rule_evidence import validate_fixture_result
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -34,6 +35,8 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
     env['RULEWEAVER_NATIVE_CHECKPOINT'] = str(evidence)
     world_evidence = reports.resolve() / 'native_world.json'
     env['RULEWEAVER_NATIVE_WORLD'] = str(world_evidence)
+    rules_evidence = reports.resolve() / 'native_rules.json'
+    env['RULEWEAVER_NATIVE_RULES'] = str(rules_evidence)
     expected = json.loads((ROOT / 'toolchain.lock.json').read_text(encoding='utf-8'))['godot_version']
     try:
         version = subprocess.run([path, '--version'], capture_output=True, text=True,
@@ -44,8 +47,9 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         reports.mkdir(parents=True, exist_ok=True)
         evidence.unlink(missing_ok=True)  # 仅删除本次输出，禁止旧证据蒙混过关。
         world_evidence.unlink(missing_ok=True)
+        rules_evidence.unlink(missing_ok=True)
         suites = []
-        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT')):
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT')):
             cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
                    '--script', 'res://tests/test_' + name + '.gd']
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
@@ -60,9 +64,13 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
             catalog = json.loads((ROOT / 'fixtures/catalog.json').read_text(encoding='utf-8'))
             validate(evidence.read_text(encoding='utf-8'), catalog)
             validate_world(world_evidence.read_text(encoding='utf-8'), catalog)
+            rule_catalog = json.loads((ROOT/'fixtures/rules_catalog.json').read_text(encoding='utf-8'))
+            rule_world = json.loads((ROOT/'fixtures/rules_world.json').read_text(encoding='utf-8'))
+            rule_pack = json.loads((ROOT/'fixtures/rules_pack.json').read_text(encoding='utf-8'))
+            validate_fixture_result(rules_evidence.read_text(encoding='utf-8'), rule_catalog, rule_world, rule_pack)
             cross = 'PASS'
-        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross,
-                'scope': 'headless components, world commands and TileMapLayer projection; no playable game or performance acceptance'}
+        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross,
+                'scope': 'headless world, typed rule graphs, replay and TileMapLayer projection; no playable game or performance acceptance'}
     except FileNotFoundError as exc:
         # 启动前缺引擎，不是原生断言通过；启动后缺输出则判失败。
         return {'status': 'FAIL' if 'suites' in locals() else 'BLOCKED', 'reason': str(exc)}
