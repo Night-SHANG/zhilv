@@ -20,7 +20,7 @@ static func decode(text: String, catalog: Dictionary) -> Dictionary:
 	var d: Variant = parser.data
 	if not Codec._shape(d, ["format", "entities", "terrain", "actor"]) or d.format != "rw.world/0.1":
 		return Codec.reject("world_format_or_fields")
-	var nested: Dictionary = Codec.decode(JSON.stringify(d.entities), catalog)
+	var nested: Dictionary = Codec._decode_parsed(d.entities, catalog)
 	if not nested.ok:
 		return nested
 	d.entities = nested.snapshot

@@ -100,12 +100,16 @@ static func decode(text: String, catalog: Dictionary) -> Dictionary:
 	var lexical: String = _lexical_error(text)
 	if not lexical.is_empty():
 		return reject(lexical)
-	if catalog.get("format") != "rw.catalog/0.1" or not catalog.get("materials") is Dictionary or not catalog.get("rules") is Dictionary:
-		return reject("invalid_catalog")
 	var parser := JSON.new()
 	if parser.parse(text) != OK:
 		return reject("invalid_json")
-	var d: Variant = parser.data
+	return _decode_parsed(parser.data, catalog)
+
+static func _decode_parsed(d: Variant, catalog: Dictionary) -> Dictionary:
+	# 内部入口：调用方已对完整原始文本执行词法/大小/深度校验。
+	# 不把Godot解析后的float重新写成JSON再校验，保持整数传输约束。
+	if catalog.get("format") != "rw.catalog/0.1" or not catalog.get("materials") is Dictionary or not catalog.get("rules") is Dictionary:
+		return reject("invalid_catalog")
 	if not _shape(d, ["format", "world_id", "stacks", "instances"]):
 		return reject("checkpoint_fields")
 	if d.format != "rw.instances/0.1":

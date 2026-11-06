@@ -29,6 +29,8 @@ func _initialize() -> void:
 		quit(1)
 		return
 	w.committed.connect(_changed)
+	check(not w.load_checkpoint(text.replace('"water_units":375', '"water_units":375.0')).ok, "fractional_wire_water_still_rejected")
+	check(not w.load_checkpoint(text.replace('"cell":[3,2]', '"cell":[3.0,2]')).ok, "fractional_wire_coordinate_still_rejected")
 	check(w.material_at(Vector2i(1, 3)) == "core:stone", "terrain_query")
 	check(w.material_at(Vector2i(3, 2)) == "user:reservoir", "instance_query_uses_same_world")
 	check(w.material_at(Vector2i(1, 2)) == "", "empty_cell")
@@ -65,7 +67,7 @@ func _initialize() -> void:
 	before = w.checkpoint_json()
 	check(not w.pour_water("creation:001", "creation:002", -1).ok and w.checkpoint_json() == before, "invalid_transfer_unchanged")
 	check(not w.load_checkpoint(text.replace('"core:stone"', '"unknown:stone"')).ok and w.checkpoint_json() == before, "bad_import_preserves_whole_world")
-	var blocked: Dictionary = JSON.parse_string(text)
+	var blocked: Dictionary = w.validate_checkpoint(text).snapshot
 	blocked.terrain.append({"cell": [1, 2], "material_id": "core:stone"})
 	var b = World.new(catalog)
 	check(b.load_checkpoint(JSON.stringify(blocked)).ok, "load_wall_fixture")
@@ -76,7 +78,7 @@ func _initialize() -> void:
 	check(b.mine(Vector2i(1, 2)).ok and b.pickup("creation:001").ok, "remove_wall_then_reach_creation")
 	var empty = World.new(catalog)
 	check(not empty.mine(Vector2i.ZERO).ok and not empty.pickup("creation:001").ok, "unloaded_world_rejects_commands")
-	var corrupt: Dictionary = JSON.parse_string(text)
+	var corrupt: Dictionary = w.validate_checkpoint(text).snapshot
 	corrupt.terrain.append({"cell": [3, 2], "material_id": "core:stone"})
 	check(not w.load_checkpoint(JSON.stringify(corrupt)).ok and w.checkpoint_json() == before, "overlap_import_is_atomic")
 	var files = Files.new()

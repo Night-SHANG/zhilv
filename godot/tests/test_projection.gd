@@ -50,7 +50,7 @@ func _initialize() -> void:
 	check(not p.set_window(Rect2i(0, 0, 0, 8)).ok, "empty_window_rejected")
 	check(not p.set_window(Rect2i(0, 0, 65536, 8)).ok, "oversized_window_rejected")
 	check(p.set_window(Rect2i(500, 0, 16, 8)).ok and layer.get_used_cells().is_empty(), "outside_window_not_rendered")
-	var far: Dictionary = JSON.parse_string(text)
+	var far: Dictionary = w.validate_checkpoint(text).snapshot
 	far.actor.cell[0] += 100000
 	for tile in far.terrain:
 		tile.cell[0] += 100000
