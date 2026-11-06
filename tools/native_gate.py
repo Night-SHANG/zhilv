@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 from check_snapshot import validate, ValidationError
+from check_world import validate_world
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -18,7 +19,8 @@ def parse_result(exit_code: int, output: str, marker: str) -> dict:
     errors = any(x in output for x in ('SCRIPT ERROR:', 'Parse Error:', 'ERROR:'))
     ok = good and passed > 0 and failed == 0 and exit_code == 0 and not errors
     return {'status': 'PASS' if ok else 'FAIL', 'passed': passed, 'failed': failed,
-            'exit_code': exit_code, 'completion_markers': len(matches)}
+            'exit_code': exit_code, 'completion_markers': len(matches),
+            'diagnostics': [line for line in output.splitlines() if any(tag in line for tag in ('FAIL:', 'SCRIPT ERROR:', 'Parse Error:', 'ERROR:', ' at:'))][:12]}
 
 
 def native_check(executable: str | None, reports: pathlib.Path) -> dict:
@@ -30,6 +32,8 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
     env['RULEWEAVER_FIXTURE_ROOT'] = str(ROOT / 'fixtures')
     evidence = reports.resolve() / 'native_checkpoint.json'
     env['RULEWEAVER_NATIVE_CHECKPOINT'] = str(evidence)
+    world_evidence = reports.resolve() / 'native_world.json'
+    env['RULEWEAVER_NATIVE_WORLD'] = str(world_evidence)
     expected = json.loads((ROOT / 'toolchain.lock.json').read_text(encoding='utf-8'))['godot_version']
     try:
         version = subprocess.run([path, '--version'], capture_output=True, text=True,
@@ -39,8 +43,9 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
             return {'status': 'BLOCKED', 'reason': 'Godot version differs from pinned baseline', 'engine': text}
         reports.mkdir(parents=True, exist_ok=True)
         evidence.unlink(missing_ok=True)  # 仅删除本次输出，禁止旧证据蒙混过关。
+        world_evidence.unlink(missing_ok=True)
         suites = []
-        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT')):
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT')):
             cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
                    '--script', 'res://tests/test_' + name + '.gd']
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
@@ -54,9 +59,10 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         if status == 'PASS':
             catalog = json.loads((ROOT / 'fixtures/catalog.json').read_text(encoding='utf-8'))
             validate(evidence.read_text(encoding='utf-8'), catalog)
+            validate_world(world_evidence.read_text(encoding='utf-8'), catalog)
             cross = 'PASS'
-        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross,
-                'scope': 'headless components and instance lifecycle; no graphical game or performance acceptance'}
+        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross,
+                'scope': 'headless components, world commands and TileMapLayer projection; no playable game or performance acceptance'}
     except FileNotFoundError as exc:
         # 启动前缺引擎，不是原生断言通过；启动后缺输出则判失败。
         return {'status': 'FAIL' if 'suites' in locals() else 'BLOCKED', 'reason': str(exc)}
