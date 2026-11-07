@@ -89,11 +89,11 @@ def main() -> int:
             script=stage/'Start_Ruleweaver.sh'
             script.write_text('#!/bin/sh\nHERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$HERE/engine/'+binary.name+'" --path "$HERE/game"\n')
             script.chmod(0o755)
-        (stage/'README.txt').write_text('织律 v0.15 开发运行包\n\n完整解压后运行 Start_Ruleweaver。无需另装 Godot；内附官方4.6.1引擎。\n这是可操作的开发构建，不是正式发行或优化导出。首次打开世界暂停，点击“继续探索”。\nA/D移动，空格跳跃，1～7选择工具，左键使用，右键收回造物，B背包制作，Tab/E织律台，F5存档，F9读档。\n织律台中草稿不会自动生效；“应用到造物”发布新版本。F5 会将未应用草稿与世界一起保存；恢复草稿不会自动发布。\n新探索不赠送工具。先用挖掘工具采集头顶六块石料，按B制作储水容器（4石料）和夜灯（2石料）。选择容器放在水面上方，再应用限量吸水，回收后带灯进入遗迹，回营地交水。也可挖开地板排水。首次交水后可探索下层回廊，并复用容器建立储水点。\n织律台“预演一拍”只运行隔离副本，不改变真实世界；“应用”才改变造物。\n保存位于系统用户数据目录 RuleweaverDevelopment，不会覆盖其他项目。\n画面为简化程序化资源；没有声音、游泳、无限地图或最终手感验收。\n字体使用操作系统已有字体，不分发字体文件。\n\n本程序使用 Godot Engine，许可与第三方版权见 GODOT_LICENSE.txt、GODOT_THIRD_PARTY.json，亦见 https://godotengine.org/license/ 。\nCoheronia工程代码许可见 game/vendor/coheronia/LICENSE；没有使用其保留版权的美术、音乐或叙事素材。\n\nSource commit: '+args.commit+'\n',encoding='utf-8')
+        (stage/'README.txt').write_text('织律 v0.16 开发运行包\n\n完整解压后运行 Start_Ruleweaver。无需另装 Godot；内附官方4.6.1引擎。\n织律台可公开常量参数、存为自创词条、追加调用、编辑副本和导出所选模块；存为词条不会应用到造物，组合后仍需点击应用。\n这是可操作的开发构建，不是正式发行或优化导出。首次打开世界暂停，点击“继续探索”。\nA/D移动，空格跳跃，1～7选择工具，左键使用，右键收回造物，B背包制作，Tab/E织律台，F5存档，F9读档。\n织律台中草稿不会自动生效；“应用到造物”发布新版本。F5 会将未应用草稿与世界一起保存；恢复草稿不会自动发布。\n新探索不赠送工具。先用挖掘工具采集头顶六块石料，按B制作储水容器（4石料）和夜灯（2石料）。选择容器放在水面上方，再应用限量吸水，回收后带灯进入遗迹，回营地交水。也可挖开地板排水。首次交水后可探索下层回廊，并复用容器建立储水点。\n织律台“预演一拍”只运行隔离副本，不改变真实世界；“应用”才改变造物。\n保存位于系统用户数据目录 RuleweaverDevelopment，不会覆盖其他项目。\n画面为简化程序化资源；没有声音、游泳、无限地图或最终手感验收。\n字体使用操作系统已有字体，不分发字体文件。\n\n本程序使用 Godot Engine，许可与第三方版权见 GODOT_LICENSE.txt、GODOT_THIRD_PARTY.json，亦见 https://godotengine.org/license/ 。\nCoheronia工程代码许可见 game/vendor/coheronia/LICENSE；没有使用其保留版权的美术、音乐或叙事素材。\n\nSource commit: '+args.commit+'\n',encoding='utf-8')
         manifest=file_manifest(stage)
         if not verify_manifest(stage,manifest):raise ValueError('Pre-package hash verification failed')
         (stage/'MANIFEST.json').write_text(json.dumps({'commit':args.commit,'kind':'source-runtime-development','engine':lock['godot_version'],'files':manifest},ensure_ascii=False,indent=2),encoding='utf-8')
-        target=args.output/f'Ruleweaver-v0.15-{system}-x86_64-development.zip'
+        target=args.output/f'Ruleweaver-v0.16-{system}-x86_64-development.zip'
         with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
             for p in sorted(stage.rglob('*')):
                 if p.is_file():z.write(p,pathlib.Path('Ruleweaver')/p.relative_to(stage))

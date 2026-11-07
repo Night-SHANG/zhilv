@@ -101,3 +101,105 @@ func validate(runtime) -> Dictionary:
 	return c if not c.ok else runtime.preview_pack(c.text)
 func mark_saved() -> void:
 	dirty=false; changed.emit()
+
+# 词条封装只操作现有数据图；世界权限、依赖闭包和预算仍由原运行器决定。
+func expose_constant(node_id: String, parameter: String) -> Dictionary:
+	var before: Dictionary=snapshot()
+	var n: Dictionary=node(node_id)
+	if n.is_empty() or not n.op in ["int","bool"]: return Codec.reject("expose_requires_constant")
+	if before.parameters.has(parameter): return Codec.reject("parameter_already_exists")
+	var staged=Draft.new()
+	var result: Dictionary=staged.restore(before)
+	if not result.ok: return result
+	result=staged.set_parameter(parameter,n.op,n.config.get("value"))
+	if not result.ok: return result
+	n.op="param";n.config={"name":parameter}
+	result=staged.upsert_node(n)
+	if not result.ok: return result
+	return _finish(before,draft.restore(staged.snapshot()))
+
+func set_parameter_default(parameter: String, value: Variant) -> Dictionary:
+	var before: Dictionary=snapshot()
+	if before.is_empty() or not before.parameters.has(parameter): return Codec.reject("unknown_parameter")
+	var staged=Draft.new()
+	var result: Dictionary=staged.restore(before)
+	if not result.ok: return result
+	result=staged.set_parameter(parameter,before.parameters[parameter].type,value)
+	if not result.ok: return result
+	return _finish(before,draft.restore(staged.snapshot()))
+
+func internalize_parameter(parameter: String) -> Dictionary:
+	var before: Dictionary=snapshot()
+	if before.is_empty() or not before.parameters.has(parameter): return Codec.reject("unknown_parameter")
+	var candidate: Dictionary=before.duplicate(true)
+	var spec: Dictionary=candidate.parameters[parameter]
+	for n in candidate.nodes:
+		if n.op=="param" and n.config.get("name")==parameter:
+			n.op=spec.type;n.config={"value":spec.default}
+	candidate.parameters.erase(parameter)
+	return _finish(before,draft.restore(candidate))
+
+func publish_word(runtime, id: String) -> Dictionary:
+	if runtime==null: return Codec.reject("runtime_not_ready")
+	var candidate: Dictionary=snapshot()
+	if candidate.is_empty(): return Codec.reject("draft_not_started")
+	var next: Dictionary=runtime.next_rule_version(id)
+	if not next.ok: return next
+	candidate.id=id;candidate.version=next.version
+	var result: Dictionary=runtime.publish_pack(JSON.stringify({"format":"rw.rules/0.1","modules":[candidate]}))
+	if result.ok: result["entry"]={"id":id,"version":next.version}
+	# 故意不mark_saved：库已保存新定义，但当前未应用草稿的身份和撤销链不变。
+	return result
+
+static func _free_node_id(candidate: Dictionary, prefix: String) -> String:
+	var ids: Dictionary={}
+	for n in candidate.nodes: ids[n.id]=true
+	var number: int=1
+	while ids.has(prefix+str(number)): number+=1
+	return prefix+str(number)
+
+func append_word(runtime, id: String, version: Variant) -> Dictionary:
+	if runtime==null: return Codec.reject("runtime_not_ready")
+	var before: Dictionary=snapshot()
+	if before.is_empty(): return Codec.reject("draft_not_started")
+	var found: Dictionary=runtime.rule_definition(id,version)
+	if not found.ok: return found
+	var candidate: Dictionary=before.duplicate(true)
+	var condition: String=_free_node_id(candidate,"enabled_")
+	candidate.nodes.append(_n(condition,"bool",{},{"value":true}))
+	var inputs: Dictionary={"when":condition}
+	for name in found.module.parameters:
+		var spec: Dictionary=found.module.parameters[name]
+		var argument: String=_free_node_id(candidate,"arg_")
+		candidate.nodes.append(_n(argument,spec.type,{},{"value":spec.default}))
+		inputs[name]=argument
+	var call_id: String=_free_node_id(candidate,"word_")
+	candidate.nodes.append(_n(call_id,"call",inputs,{"id":id,"version":version}))
+	candidate.effects.append(call_id)
+	var result: Dictionary=_finish(before,draft.restore(candidate))
+	if result.ok: result["id"]=call_id
+	return result
+
+func change_call_target(runtime, node_id: String, id: String, version: Variant) -> Dictionary:
+	if runtime==null: return Codec.reject("runtime_not_ready")
+	var before: Dictionary=snapshot();var n: Dictionary=node(node_id)
+	if n.is_empty() or n.op!="call": return Codec.reject("not_call_node")
+	var found: Dictionary=runtime.rule_definition(id,version)
+	if not found.ok: return found
+	var previous: Dictionary=runtime.rule_definition(n.config.get("id",""),n.config.get("version",0))
+	var old_parameters: Dictionary=previous.module.parameters if previous.ok else {}
+	var retained: Dictionary={}
+	for port in n.inputs:
+		if port=="when" or (found.module.parameters.has(port) and old_parameters.has(port) and old_parameters[port].type==found.module.parameters[port].type):
+			retained[port]=n.inputs[port]
+	n.inputs=retained;n.config={"id":id,"version":version}
+	return _finish(before,draft.upsert_node(n))
+
+func edit_word(runtime, id: String, version: Variant) -> Dictionary:
+	if runtime==null: return Codec.reject("runtime_not_ready")
+	if not id.begins_with("user:"): return Codec.reject("reserved_rule_namespace")
+	var before: Dictionary=snapshot()
+	if before.is_empty(): return Codec.reject("draft_not_started")
+	var found: Dictionary=runtime.rule_definition(id,version)
+	if not found.ok: return found
+	return _finish(before,draft.restore(found.module))

@@ -41,6 +41,7 @@ var _file_dialog: FileDialog
 var _confirm: ConfirmationDialog
 var _pending: Callable
 var _file_mode: String=""
+var _word_export_entry: Dictionary={}
 var _prior_editor_pause: bool=true
 var _prior_dialog_pause: bool=true
 var _draft_cache: Dictionary={}
@@ -67,7 +68,7 @@ func _build_ui() -> void:
 	var row:=HBoxContainer.new();row.add_theme_constant_override("separation",16);header.add_child(row)
 	row.add_child(Style.label("织律",29,Style.GOLD))
 	var brand:=VBoxContainer.new();brand.add_theme_constant_override("separation",0);row.add_child(brand)
-	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.15 · 开发构建",12,Style.MUTED))
+	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.16 · 开发构建",12,Style.MUTED))
 	var spacer:=Control.new();spacer.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(spacer)
 	_clock_label=Style.label("第 1 日 · 白昼",14);row.add_child(_clock_label)
 	_pause_button=Style.button("开始探索",_toggle_pause);_pause_button.name="PauseButton";row.add_child(_pause_button)
@@ -88,6 +89,8 @@ func _build_ui() -> void:
 	loom.apply_requested.connect(func():_report(apply_draft(),"规则已应用到所选造物；关闭织律台后继续探索"))
 	loom.close_requested.connect(close_loom)
 	loom.export_requested.connect(func():_show_file("export"))
+	loom.word_export_requested.connect(func(entry:Dictionary):
+		_word_export_entry=entry.duplicate(true);_show_file("export_word"))
 	loom.import_requested.connect(func():_show_file("import"))
 	loom.message.connect(_notify)
 	inventory=InventoryPanel.new();inventory.name="InventoryPanel";inventory.visible=false;_body.add_child(inventory)
@@ -284,12 +287,16 @@ func load_game(slot: String=DEFAULT_SLOT, backup: bool=false) -> Dictionary:
 		_draft_target="";play.set_controls_enabled(true)
 		play.set_paused(true);_refresh_hud()
 	return result
-func export_scroll_to(path: String, overwrite: bool=false) -> Dictionary:
-	var item: Dictionary=world.get_instance(selected_id)
-	if item.is_empty() or item.rules.is_empty():return Codec.reject("no_published_rule")
+func export_scroll_to(path: String, overwrite: bool=false, entry: Dictionary={}) -> Dictionary:
+	var ref: Dictionary=entry.duplicate(true)
+	if ref.is_empty():
+		var item: Dictionary=world.get_instance(selected_id)
+		if item.is_empty() or item.rules.is_empty():return Codec.reject("no_published_rule")
+		ref=item.rules.back().duplicate(true)
+	if not Codec._shape(ref,["id","version"]) or not Codec.identifier(ref.id) or typeof(ref.version)!=TYPE_INT:return Codec.reject("invalid_rule_reference")
 	if not path.ends_with(".json") or path.begins_with("res://"):return Codec.reject("scroll_path")
 	if FileAccess.file_exists(path) and not overwrite:return Codec.reject("file_exists")
-	var ref: Dictionary=item.rules.back();var result: Dictionary=runtime.export_rule(ref.id,int(ref.version))
+	var result: Dictionary=runtime.export_rule(ref.id,ref.version)
 	if not result.ok:return result
 	var file:=FileAccess.open(path,FileAccess.WRITE)
 	if file==null:return Codec.reject("scroll_write_failed")
@@ -305,18 +312,19 @@ func import_scroll_from(path: String) -> Dictionary:
 	return runtime.import_scroll(text)
 func _show_file(mode: String) -> void:
 	_prior_dialog_pause=runtime.clock_state().paused;play.set_paused(true);play.set_controls_enabled(false)
-	_file_mode=mode;_file_dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if mode=="export" else FileDialog.FILE_MODE_OPEN_FILE
-	_file_dialog.title="导出已发布律卷" if mode=="export" else "导入律卷（不自动绑定）"
-	if mode=="export":_file_dialog.current_file="ruleweaver_scroll.json"
+	_file_mode=mode;_file_dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if mode in ["export","export_word"] else FileDialog.FILE_MODE_OPEN_FILE
+	_file_dialog.title="导出已发布律卷" if mode in ["export","export_word"] else "导入律卷（不自动绑定）"
+	if mode!="export_word":_word_export_entry.clear()
+	if mode in ["export","export_word"]:_file_dialog.current_file="ruleweaver_scroll.json"
 	_file_dialog.popup_centered(Vector2i(900,600))
 func _close_file() -> void:_restore_dialog_pause()
 func _on_file_selected(path: String) -> void:
-	var result: Dictionary=export_scroll_to(path,true) if _file_mode=="export" else import_scroll_from(path)
+	var result: Dictionary=export_scroll_to(path,true,_word_export_entry) if _file_mode in ["export","export_word"] else import_scroll_from(path)
 	if result.ok and _file_mode=="import":
 		var m: Dictionary=runtime.rule_definition(result.entry.id,int(result.entry.version))
 		if m.ok:
 			loom.document.load_module(m.module,m.module.id if m.module.id.begins_with("user:") else "user:imported_rule")
-	_report(result,"律卷已导出" if _file_mode=="export" else "已导入到草稿；尚未绑定。检查后点击应用。")
+	_report(result,"律卷已导出" if _file_mode in ["export","export_word"] else "已导入到草稿；尚未绑定。检查后点击应用。")
 	_restore_dialog_pause()
 func _restore_dialog_pause() -> void:
 	if not setup_complete:return

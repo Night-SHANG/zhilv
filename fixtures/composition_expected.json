@@ -1,0 +1,455 @@
+{
+  "catalog": {
+    "format": "rw.catalog/0.1",
+    "materials": {
+      "core:stone": {
+        "stackable": true
+      },
+      "user:reservoir": {
+        "stackable": false,
+        "state": "reservoir/0.1"
+      }
+    },
+    "rules": {
+      "user:water_pump": [
+        1,
+        2
+      ],
+      "user:dark_lamp": [
+        1
+      ],
+      "user:smart_carrier": [
+        1
+      ],
+      "user:actor_a": [
+        1
+      ],
+      "user:actor_b": [
+        1
+      ]
+    }
+  },
+  "rules": {
+    "format": "rw.rules/0.1",
+    "modules": [
+      {
+        "id": "user:water_pump",
+        "version": 1,
+        "parameters": {
+          "rate": {
+            "type": "int",
+            "default": 150
+          }
+        },
+        "nodes": [
+          {
+            "id": "source",
+            "op": "neighbor_water",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "available",
+            "op": "water_units",
+            "inputs": {
+              "source": "source"
+            },
+            "config": {}
+          },
+          {
+            "id": "water",
+            "op": "read_state",
+            "inputs": {},
+            "config": {
+              "field": "water_units"
+            }
+          },
+          {
+            "id": "capacity",
+            "op": "read_state",
+            "inputs": {},
+            "config": {
+              "field": "capacity_units"
+            }
+          },
+          {
+            "id": "room",
+            "op": "sub",
+            "inputs": {
+              "a": "capacity",
+              "b": "water"
+            },
+            "config": {}
+          },
+          {
+            "id": "rate",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "rate"
+            }
+          },
+          {
+            "id": "limited",
+            "op": "min",
+            "inputs": {
+              "a": "rate",
+              "b": "available"
+            },
+            "config": {}
+          },
+          {
+            "id": "amount",
+            "op": "min",
+            "inputs": {
+              "a": "limited",
+              "b": "room"
+            },
+            "config": {}
+          },
+          {
+            "id": "zero",
+            "op": "int",
+            "inputs": {},
+            "config": {
+              "value": 0
+            }
+          },
+          {
+            "id": "can_take",
+            "op": "lt",
+            "inputs": {
+              "a": "zero",
+              "b": "amount"
+            },
+            "config": {}
+          },
+          {
+            "id": "take",
+            "op": "take_environment_water",
+            "inputs": {
+              "when": "can_take",
+              "source": "source",
+              "amount": "amount"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "take"
+        ]
+      },
+      {
+        "id": "user:water_pump",
+        "version": 2,
+        "parameters": {
+          "rate": {
+            "type": "int",
+            "default": 50
+          }
+        },
+        "nodes": [
+          {
+            "id": "source",
+            "op": "neighbor_water",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "available",
+            "op": "water_units",
+            "inputs": {
+              "source": "source"
+            },
+            "config": {}
+          },
+          {
+            "id": "water",
+            "op": "read_state",
+            "inputs": {},
+            "config": {
+              "field": "water_units"
+            }
+          },
+          {
+            "id": "capacity",
+            "op": "read_state",
+            "inputs": {},
+            "config": {
+              "field": "capacity_units"
+            }
+          },
+          {
+            "id": "room",
+            "op": "sub",
+            "inputs": {
+              "a": "capacity",
+              "b": "water"
+            },
+            "config": {}
+          },
+          {
+            "id": "rate",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "rate"
+            }
+          },
+          {
+            "id": "limited",
+            "op": "min",
+            "inputs": {
+              "a": "rate",
+              "b": "available"
+            },
+            "config": {}
+          },
+          {
+            "id": "amount",
+            "op": "min",
+            "inputs": {
+              "a": "limited",
+              "b": "room"
+            },
+            "config": {}
+          },
+          {
+            "id": "zero",
+            "op": "int",
+            "inputs": {},
+            "config": {
+              "value": 0
+            }
+          },
+          {
+            "id": "can_take",
+            "op": "lt",
+            "inputs": {
+              "a": "zero",
+              "b": "amount"
+            },
+            "config": {}
+          },
+          {
+            "id": "take",
+            "op": "take_environment_water",
+            "inputs": {
+              "when": "can_take",
+              "source": "source",
+              "amount": "amount"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "take"
+        ]
+      },
+      {
+        "id": "user:dark_lamp",
+        "version": 1,
+        "parameters": {
+          "enabled": {
+            "type": "bool",
+            "default": true
+          }
+        },
+        "nodes": [
+          {
+            "id": "always",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "enabled"
+            }
+          },
+          {
+            "id": "dark",
+            "op": "is_ambient_dark",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "light",
+            "op": "set_light",
+            "inputs": {
+              "when": "always",
+              "value": "dark"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "light"
+        ]
+      },
+      {
+        "id": "user:smart_carrier",
+        "version": 1,
+        "parameters": {
+          "rate": {
+            "type": "int",
+            "default": 150
+          }
+        },
+        "nodes": [
+          {
+            "id": "enabled_1",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "arg_1",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "rate"
+            }
+          },
+          {
+            "id": "word_1",
+            "op": "call",
+            "inputs": {
+              "when": "enabled_1",
+              "rate": "arg_1"
+            },
+            "config": {
+              "id": "user:water_pump",
+              "version": 1
+            }
+          },
+          {
+            "id": "enabled_2",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "arg_2",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "word_2",
+            "op": "call",
+            "inputs": {
+              "when": "enabled_2",
+              "enabled": "arg_2"
+            },
+            "config": {
+              "id": "user:dark_lamp",
+              "version": 1
+            }
+          }
+        ],
+        "effects": [
+          "word_1",
+          "word_2"
+        ]
+      },
+      {
+        "id": "user:actor_a",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "enabled_1",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "arg_1",
+            "op": "int",
+            "inputs": {},
+            "config": {
+              "value": 100
+            }
+          },
+          {
+            "id": "word_1",
+            "op": "call",
+            "inputs": {
+              "when": "enabled_1",
+              "rate": "arg_1"
+            },
+            "config": {
+              "id": "user:smart_carrier",
+              "version": 1
+            }
+          }
+        ],
+        "effects": [
+          "word_1"
+        ]
+      },
+      {
+        "id": "user:actor_b",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "enabled_1",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "arg_1",
+            "op": "int",
+            "inputs": {},
+            "config": {
+              "value": 200
+            }
+          },
+          {
+            "id": "word_1",
+            "op": "call",
+            "inputs": {
+              "when": "enabled_1",
+              "rate": "arg_1"
+            },
+            "config": {
+              "id": "user:smart_carrier",
+              "version": 1
+            }
+          }
+        ],
+        "effects": [
+          "word_1"
+        ]
+      }
+    ]
+  },
+  "export_keys": [
+    [
+      "user:actor_a",
+      1
+    ],
+    [
+      "user:water_pump",
+      1
+    ],
+    [
+      "user:dark_lamp",
+      1
+    ],
+    [
+      "user:smart_carrier",
+      1
+    ]
+  ]
+}
