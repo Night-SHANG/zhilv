@@ -68,3 +68,14 @@ jobs:
           path: reports/current/
           retention-days: 7
           if-no-files-found: warn
+      - name: Package Windows development launcher after native checks
+        if: matrix.os == 'windows-latest'
+        run: python tools/package_desktop.py --output packages --commit "${{ github.sha }}"
+      - name: Upload playable development launcher
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: playable-windows-${{ github.sha }}
+          path: packages/
+          retention-days: 7
+          if-no-files-found: error

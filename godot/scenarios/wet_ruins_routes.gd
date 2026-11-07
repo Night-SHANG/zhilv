@@ -11,29 +11,7 @@ const Expedition = preload("res://runtime/expedition_session.gd")
 const Files = preload("res://runtime/checkpoint_files.gd")
 
 static func setup(reverse_water: bool=false) -> Dictionary:
-	var text: String=FileAccess.get_file_as_string("res://content/wet_ruins.json")
-	var error: String=Codec._lexical_error(text)
-	if not error.is_empty(): return Codec.reject(error)
-	var parser:=JSON.new()
-	if parser.parse(text)!=OK: return Codec.reject("scenario_json")
-	var data: Dictionary=parser.data
-	if reverse_water: data.world.water.reverse()
-	var normalized: Dictionary=WorldCodec.decode_value(data.world,data.catalog)
-	if not normalized.ok: return normalized
-	var w=World.new(data.catalog)
-	var result: Dictionary=w.load_checkpoint(JSON.stringify(normalized.snapshot))
-	if not result.ok: return result
-	var r=Runtime.new(data.catalog,w)
-	var program: Dictionary=Compiler.compile_value(data.rules,data.catalog)
-	if not program.ok: return program
-	result=r.install_pack(JSON.stringify(program.source))
-	if not result.ok: return result
-	result=r.configure_clock(int(data.clock.cycle_ticks),int(data.clock.daylight_ticks))
-	if not result.ok: return result
-	var e=Expedition.new()
-	result=e.attach(r,w,data.definition)
-	if not result.ok: return result
-	return {"ok":true,"error":"","world":w,"runtime":r,"expedition":e}
+	return preload("res://runtime/scenario_loader.gd").load_scenario("res://content/wet_ruins.json",reverse_water)
 
 static func _node(id: String,op: String,config: Dictionary={}) -> Dictionary:
 	return {"id":id,"op":op,"config":config,"inputs":{}}

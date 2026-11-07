@@ -63,7 +63,7 @@ def validate_native_play(text: str, catalog: dict) -> dict:
     return data
 
 
-def validate_live_expedition(text: str, scenario: dict, contract: dict) -> dict:
+def validate_live_expedition(text: str, scenario: dict, contract: dict, *, paused: bool = False) -> dict:
     rules = copy.deepcopy(scenario['rules'])
     rules['modules'].append(copy.deepcopy(contract['pump']))
     data = validate_play_checkpoint(text, scenario['catalog'], scenario['definition'], rules)
@@ -75,7 +75,7 @@ def validate_live_expedition(text: str, scenario: dict, contract: dict) -> dict:
     require(world['entities']['world_id'] == original['entities']['world_id'], '世界被更换')
     for key in ('cycle_ticks', 'daylight_ticks'):
         require(sim['clock'][key] == scenario['clock'][key], '昼夜配置被更换')
-    require(sim['clock']['paused'] is False, '真实路线收尾不是运行状态')
+    require(sim['clock']['paused'] is paused, '真实路线收尾暂停状态不符')
     require({tuple(t['cell']): t['material_id'] for t in world['terrain']} == {tuple(t['cell']): t['material_id'] for t in original['terrain']}, '自动泵路线不应改地形')
     require(world['entities']['stacks'] == original['entities']['stacks'], '普通材料被改变')
     entities = {e['id']: e for e in world['entities']['instances']}
@@ -92,3 +92,7 @@ def validate_live_expedition(text: str, scenario: dict, contract: dict) -> dict:
     total = sum(e['state']['water_units'] for e in entities.values()) + sum(w['units'] for w in world['water'])
     require(total == contract['initial_water'], '真实运动/资源/恢复总水量不守恒')
     return data
+
+
+def validate_ui_expedition(text: str, scenario: dict, contract: dict) -> dict:
+    return validate_live_expedition(text, scenario, contract, paused=True)
