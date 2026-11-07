@@ -1,0 +1,137 @@
+{
+  "initial_water": 6000,
+  "actor_cell": [
+    -2,
+    0
+  ],
+  "lamp_cell": [
+    9,
+    -1
+  ],
+  "completed": [
+    "goal:ruins",
+    "goal:irrigate"
+  ],
+  "routes": {
+    "manual": {
+      "tick": 140,
+      "vessel_water": 4500,
+      "mined": 0,
+      "authored_rule": false
+    },
+    "drainage": {
+      "tick": 274,
+      "vessel_water": 0,
+      "mined": 1,
+      "authored_rule": false
+    },
+    "authored": {
+      "tick": 146,
+      "vessel_water": 4519,
+      "mined": 0,
+      "authored_rule": true
+    }
+  },
+  "pump": {
+    "id": "user:reusable_water_pump",
+    "version": 1,
+    "parameters": {},
+    "nodes": [
+      {
+        "id": "source",
+        "op": "neighbor_water",
+        "inputs": {},
+        "config": {}
+      },
+      {
+        "id": "available",
+        "op": "water_units",
+        "inputs": {
+          "source": "source"
+        },
+        "config": {}
+      },
+      {
+        "id": "water",
+        "op": "read_state",
+        "inputs": {},
+        "config": {
+          "field": "water_units"
+        }
+      },
+      {
+        "id": "capacity",
+        "op": "read_state",
+        "inputs": {},
+        "config": {
+          "field": "capacity_units"
+        }
+      },
+      {
+        "id": "room",
+        "op": "sub",
+        "inputs": {
+          "a": "capacity",
+          "b": "water"
+        },
+        "config": {}
+      },
+      {
+        "id": "rate",
+        "op": "int",
+        "inputs": {},
+        "config": {
+          "value": 250
+        }
+      },
+      {
+        "id": "limited",
+        "op": "min",
+        "inputs": {
+          "a": "rate",
+          "b": "available"
+        },
+        "config": {}
+      },
+      {
+        "id": "amount",
+        "op": "min",
+        "inputs": {
+          "a": "limited",
+          "b": "room"
+        },
+        "config": {}
+      },
+      {
+        "id": "zero",
+        "op": "int",
+        "inputs": {},
+        "config": {
+          "value": 0
+        }
+      },
+      {
+        "id": "can_take",
+        "op": "lt",
+        "inputs": {
+          "a": "zero",
+          "b": "amount"
+        },
+        "config": {}
+      },
+      {
+        "id": "take",
+        "op": "take_environment_water",
+        "inputs": {
+          "when": "can_take",
+          "source": "source",
+          "amount": "amount"
+        },
+        "config": {}
+      }
+    ],
+    "effects": [
+      "take"
+    ]
+  }
+}

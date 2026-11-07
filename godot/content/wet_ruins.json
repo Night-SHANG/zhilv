@@ -1,0 +1,558 @@
+{
+  "format": "rw.scenario/0.1",
+  "definition": {
+    "id": "scenario:wet_ruins",
+    "version": 1,
+    "objectives": [
+      {
+        "id": "goal:ruins",
+        "type": "visit",
+        "requires": [],
+        "cell": [
+          8,
+          0
+        ],
+        "lit": true,
+        "max_water": 199
+      },
+      {
+        "id": "goal:irrigate",
+        "type": "deliver",
+        "requires": [
+          "goal:ruins"
+        ],
+        "instance": "creation:plot",
+        "water_units": 500
+      }
+    ]
+  },
+  "catalog": {
+    "format": "rw.catalog/0.1",
+    "materials": {
+      "core:stone": {
+        "stackable": true
+      },
+      "user:reservoir": {
+        "stackable": false,
+        "state": "reservoir/0.1"
+      },
+      "user:crystal": {
+        "stackable": false,
+        "state": "reservoir/0.1"
+      }
+    },
+    "rules": {
+      "core:portable_lamp": [
+        1
+      ]
+    }
+  },
+  "clock": {
+    "cycle_ticks": 120,
+    "daylight_ticks": 60
+  },
+  "world": {
+    "format": "rw.world/0.2",
+    "actor": {
+      "id": "player:local",
+      "cell": [
+        0,
+        0
+      ]
+    },
+    "terrain": [
+      {
+        "cell": [
+          -4,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -3,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -2,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -1,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          0,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          1,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          2,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          3,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          4,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          5,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          6,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          7,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          8,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          9,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          -2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -4,
+          -1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          -1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -4,
+          0
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          0
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -4,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -3,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -2,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -1,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          0,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          1,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          2,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          3,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          4,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          5,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          6,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          7,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          8,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          9,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          1
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -4,
+          2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          2
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -4,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -3,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -2,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          -1,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          0,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          1,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          2,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          3,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          4,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          5,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          6,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          7,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          8,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          9,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          10,
+          3
+        ],
+        "material_id": "core:stone"
+      }
+    ],
+    "water": [
+      {
+        "cell": [
+          2,
+          0
+        ],
+        "units": 1000
+      },
+      {
+        "cell": [
+          3,
+          0
+        ],
+        "units": 1000
+      },
+      {
+        "cell": [
+          4,
+          0
+        ],
+        "units": 1000
+      },
+      {
+        "cell": [
+          5,
+          0
+        ],
+        "units": 1000
+      },
+      {
+        "cell": [
+          6,
+          0
+        ],
+        "units": 1000
+      },
+      {
+        "cell": [
+          7,
+          0
+        ],
+        "units": 1000
+      }
+    ],
+    "entities": {
+      "format": "rw.instances/0.1",
+      "world_id": "world:wet_ruins",
+      "stacks": {
+        "core:stone": 20
+      },
+      "instances": [
+        {
+          "id": "creation:vessel",
+          "material_id": "user:reservoir",
+          "rules": [],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 6000,
+            "light_on": false
+          },
+          "location": {
+            "kind": "inventory",
+            "owner": "player:local"
+          }
+        },
+        {
+          "id": "creation:lamp",
+          "material_id": "user:crystal",
+          "rules": [
+            {
+              "id": "core:portable_lamp",
+              "version": 1
+            }
+          ],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 1,
+            "light_on": false
+          },
+          "location": {
+            "kind": "inventory",
+            "owner": "player:local"
+          }
+        },
+        {
+          "id": "creation:plot",
+          "material_id": "user:reservoir",
+          "rules": [],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 6000,
+            "light_on": false
+          },
+          "location": {
+            "kind": "world",
+            "cell": [
+              -3,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "rules": {
+    "format": "rw.rules/0.1",
+    "modules": [
+      {
+        "id": "core:portable_lamp",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "on",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "light",
+            "op": "set_light",
+            "inputs": {
+              "when": "on",
+              "value": "on"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "light"
+        ]
+      }
+    ]
+  }
+}

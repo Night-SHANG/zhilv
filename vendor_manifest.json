@@ -1,0 +1,31 @@
+{
+  "repository": "ppeck1/coheronia",
+  "commit": "3f4dbdd7a268f232a49407db5160111a090ea964",
+  "license": "MIT (engineering only)",
+  "files": [
+    {
+      "path": "godot/vendor/coheronia/inventory.gd",
+      "upstream_path": "scripts/inventory/inventory.gd",
+      "git_blob_sha1": "66a26e311360ed723f29d3a0238466d68964d3be",
+      "sha256": "e553fc3556042f50de2adf28bc6732e2d95190d4d6c621961922bfb4deb14cab"
+    },
+    {
+      "path": "godot/vendor/coheronia/world_serialize.gd",
+      "upstream_path": "scripts/world/world_serialize.gd",
+      "git_blob_sha1": "6469459778c1b7e3afe811e9aba71cd41f379e44",
+      "sha256": "b8e359b4263885ad41de86b92d13863b51aaa0efcaa18bd04807e1ca535a33b3"
+    },
+    {
+      "path": "godot/vendor/coheronia/LICENSE",
+      "upstream_path": "LICENSE",
+      "git_blob_sha1": "d496b69f08350da1ce39dd29cdd5bae8b6c37e91",
+      "sha256": "dea14f517950c8fb7b7b1752a0059d7ad9bda03b60615921608f8cbc2ba7de7e"
+    },
+    {
+      "path": "godot/vendor/coheronia/LICENSE-ASSETS.md",
+      "upstream_path": "LICENSE-ASSETS.md",
+      "git_blob_sha1": "578efb0741c807657724c05d9503c19d8e73db50",
+      "sha256": "b5ae83b879d8fb00f4667da7f7a5fe730fd8f5680a676559b79e1664ccc4aff6"
+    }
+  ]
+}

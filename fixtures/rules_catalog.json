@@ -1,0 +1,30 @@
+{
+  "format": "rw.catalog/0.1",
+  "materials": {
+    "core:stone": {
+      "stackable": true
+    },
+    "user:reservoir": {
+      "stackable": false,
+      "state": "reservoir/0.1"
+    },
+    "user:crystal": {
+      "stackable": false,
+      "state": "reservoir/0.1"
+    }
+  },
+  "rules": {
+    "user:night_light": [
+      1
+    ],
+    "user:transfer": [
+      1
+    ],
+    "user:absorb": [
+      1
+    ],
+    "user:drift": [
+      1
+    ]
+  }
+}
