@@ -1,0 +1,35 @@
+name: Source handoff
+
+on:
+  push:
+    branches: ['dev/**']
+    paths: ['.github/workflows/source-handoff.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Archive tracked source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-handoff"
+          git archive --format=tar --prefix=source/ HEAD -o "$RUNNER_TEMP/source-handoff/source.tar"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-handoff/COMMIT.txt"
+          git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/source-handoff/TREE.txt"
+          cd "$RUNNER_TEMP/source-handoff"
+          sha256sum source.tar > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: source-${{ github.sha }}
+          path: ${{ runner.temp }}/source-handoff/
+          retention-days: 7
+          if-no-files-found: error
