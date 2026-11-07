@@ -25,6 +25,7 @@ jobs:
           git archive --format=tar --prefix=source/ HEAD -o "$RUNNER_TEMP/source-handoff/source.tar"
           git rev-parse HEAD > "$RUNNER_TEMP/source-handoff/COMMIT.txt"
           git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/source-handoff/TREE.txt"
+          git ls-files -z | xargs -0 sha256sum > "$RUNNER_TEMP/source-handoff/FILES.sha256"
           cd "$RUNNER_TEMP/source-handoff"
           sha256sum source.tar > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
