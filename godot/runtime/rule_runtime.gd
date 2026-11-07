@@ -13,6 +13,8 @@ var _program: Dictionary = {}
 var _tick: int = 0
 var _busy: bool = false
 var _clock: Dictionary = {}
+# 诊断是上一拍证据，不写入存档、不参与规则计算。
+var _last_report: Dictionary = {}
 
 func _init(catalog: Dictionary, world) -> void:
 	_catalog = catalog.duplicate(true)
@@ -64,6 +66,7 @@ func advance(night: Variant, per_instance_budget: Variant = 512, total_budget: V
 	_busy = true
 	var result: Dictionary = _advance(night, per_instance_budget, total_budget)
 	_busy = false
+	_record_report(result)
 	return result
 
 func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dictionary:
@@ -89,6 +92,7 @@ func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dicti
 	active.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.id < b.id)
 	var plans: Array = []
 	var errors: Array = []
+	var outcomes: Array = []
 	var spent: int = 0
 	# 全部读取同一步快照；总预算不足时，任何造物都尚未提交。
 	for entity in active:
@@ -98,19 +102,22 @@ func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dicti
 			return Codec.reject("total_instruction_budget")
 		if not evaluation.ok:
 			errors.append({"id": entity.id, "error": evaluation.error, "module": evaluation.module, "node": evaluation.node})
+			outcomes.append({"id":entity.id,"status":"error","error":evaluation.error,"commands":0,"instructions":evaluation.spent,"checks":evaluation.checks})
 		else:
-			plans.append({"id": entity.id, "commands": evaluation.commands})
+			plans.append({"id": entity.id, "commands": evaluation.commands,"instructions":evaluation.spent,"checks":evaluation.checks})
 	var committed: int = 0
 	for plan in plans:
 		if plan.commands.is_empty():
+			outcomes.append({"id":plan.id,"status":"waiting","error":"","commands":0,"instructions":plan.instructions,"checks":plan.checks})
 			continue
 		var result: Dictionary = _world.apply_rule_commands(plan.id, plan.commands)
+		outcomes.append({"id":plan.id,"status":"committed" if result.ok else "blocked","error":result.error,"commands":plan.commands.size(),"instructions":plan.instructions,"checks":plan.checks})
 		if result.ok:
 			committed += 1
 		else:
 			errors.append({"id": plan.id, "error": result.error})
 	_tick += 1
-	return {"ok": true, "error": "", "tick": _tick, "instructions": spent, "committed": committed, "errors": errors}
+	return {"ok": true, "error": "", "tick": _tick, "instructions": spent, "committed": committed, "errors": errors, "outcomes":outcomes}
 
 func checkpoint_json() -> String:
 	return JSON.stringify(checkpoint_value())
@@ -203,6 +210,7 @@ func _adopt_revision(program: Dictionary, prepared: Dictionary, tick: int, clock
 	_program = program
 	_tick = tick
 	if clock_override != null: _clock = clock_override.duplicate()
+	_last_report.clear()
 	_world.reloaded.emit()
 	_busy = false
 	return {"ok":true,"error":""}
@@ -310,18 +318,66 @@ func _timed_step(force: bool, per_instance_budget: Variant, total_budget: Varian
 	var result: Dictionary = shadow.advance(night,per_instance_budget,total_budget)
 	if not result.ok:
 		_busy = false
+		_record_report(result)
 		return result
 	var fluid: Dictionary = {"ok":true,"error":"","operations":0,"changed":0}
 	if WorldCodec.has_environment(shadow_world.rule_view()): fluid = shadow_world.advance_water(water_budget)
 	if not fluid.ok:
 		_busy = false
+		_record_report(fluid)
 		return fluid
 	var prepared: Dictionary = _world._prepare_rule_revision(_catalog.rules,shadow_world.rule_view())
 	if not prepared.ok:
 		_busy = false
+		_record_report(prepared)
 		return prepared
 	_adopt_revision(_program,prepared,shadow._tick)
 	result["night"] = night
 	result["water_operations"] = fluid.operations
 	result["water_changed"] = fluid.changed
+	_record_report(result)
 	return result
+
+
+func _record_report(result: Dictionary) -> void:
+	_last_report = result.duplicate(true)
+	_last_report["tick"] = _tick
+
+func execution_feedback(id: String) -> Dictionary:
+	## 上一模拟步的只读证据。当前背包/未绑定状态优先于历史结果。
+	var entity: Dictionary = _world.get_instance(id)
+	if entity.is_empty(): return Codec.reject("missing_instance")
+	var info: Dictionary = {"ok":true,"error":"","id":id,"tick":_tick,"status":"not_run","commands":0,"instructions":0,"checks":[],"paused":_clock.get("paused",false)}
+	if entity.location.kind == "inventory": info.status="carried"; return info
+	if entity.rules.is_empty(): info.status="unbound"; return info
+	if _last_report.is_empty(): return info
+	info.tick = _last_report.tick
+	if not _last_report.ok:
+		info.status="aborted"; info.error=_last_report.error; return info
+	for outcome in _last_report.get("outcomes",[]):
+		if outcome.id == id:
+			info.merge(outcome.duplicate(true),true)
+			return info
+	return info
+
+func preview_rule_tick(id: String, text: String, entry: Dictionary, per_instance_budget: int=512, total_budget: int=32768, water_budget: int=65536) -> Dictionary:
+	## 使用已有整拍事务做隔离预演；既不发布版本，也不推进真实世界和任务。
+	if _busy: return Codec.reject("runtime_busy")
+	if _clock.is_empty(): return Codec.reject("clock_runtime_not_ready")
+	if not Codec._shape(entry,["id","version"]) or not Codec.identifier(entry.id) or typeof(entry.version)!=TYPE_INT or entry.version<1:
+		return Codec.reject("invalid_rule_reference")
+	var candidate: Dictionary = _prepare_publish(text,{id:[entry]})
+	if not candidate.ok: return candidate
+	var shadow_world = WorldSession.new(candidate.prepared.catalog)
+	shadow_world._adopt_rule_revision(candidate.prepared)
+	var shadow = get_script().new(candidate.prepared.catalog,shadow_world)
+	shadow._program = candidate.program
+	shadow._tick = _tick
+	shadow._clock = _clock.duplicate()
+	var before: Dictionary = shadow_world.get_instance(id)
+	var total_before: int = shadow_world.total_water_units()
+	var result: Dictionary = shadow.single_step(per_instance_budget,total_budget,water_budget)
+	if not result.ok: return result
+	return {"ok":true,"error":"","preview":true,"tick":result.tick,
+		"outcome":shadow.execution_feedback(id),"before":before,"after":shadow_world.get_instance(id),
+		"total_before":total_before,"total_after":shadow_world.total_water_units(),"other_errors":result.errors.duplicate(true)}

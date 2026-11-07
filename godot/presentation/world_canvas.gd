@@ -3,6 +3,7 @@ extends Control
 signal cell_clicked(cell: Vector2i, button: int, shift: bool)
 const Style = preload("res://presentation/ui_theme.gd")
 var world
+var objective_markers:Array=[]
 var runtime
 var selected_id: String="creation:vessel"
 var tool: String="select"
@@ -138,6 +139,13 @@ func _draw() -> void:
 	_rect(foot+Vector2(3*_face,-25),Vector2(1,1),Color("222d34"))
 	draw_line(foot+Vector2(-4,-20),foot+Vector2(5,-20),Style.AQUA,2)
 	draw_line(foot+Vector2(-4,-20),foot+Vector2(-9*_face,-16+sin(_time*3)),Style.AQUA,1.5)
+	# 标记只读来自当前目标；不会生成物品、移动角色或替玩家完成任务。
+	for marker in objective_markers:
+		var point:=Vector2(marker.cell)*16
+		draw_rect(Rect2(point+Vector2.ONE,Vector2(14,14)),Color(Style.GOLD,0.15))
+		draw_rect(Rect2(point+Vector2.ONE,Vector2(14,14)),Style.GOLD,false,0.8)
+		draw_line(point+Vector2(5,8),point+Vector2(11,8),Style.GOLD,0.7)
+		draw_line(point+Vector2(8,5),point+Vector2(8,11),Style.GOLD,0.7)
 	# 光标不影响状态；权限失败时只显示提示。
 	if _hover:
 		var c: Color=Style.AQUA if world._access(_mouse_cell).ok else Style.BAD

@@ -8,6 +8,7 @@ signal message(text: String, bad: bool)
 const Style = preload("res://presentation/ui_theme.gd")
 const Document = preload("res://presentation/loom_document.gd")
 const Compiler = preload("res://runtime/rule_compiler.gd")
+const Feedback=preload("res://presentation/execution_text.gd")
 const TYPES = {"bool":0,"int":1,"ref":2,"cell_ref":3,"effect":4}
 const COLORS = {"bool":Color("bb9bd9"),"int":Color("e6ba72"),"ref":Color("9ac490"),"cell_ref":Color("71c9d2"),"effect":Color("f0b17b")}
 const TITLES = {"bool":"开关常量","int":"数值常量","is_night":"是否夜晚","is_ambient_dark":"环境是否昏暗","read_state":"读取自身状态","neighbor":"相邻造物","exists":"造物存在","neighbor_water":"相邻环境水","water_exists":"水源存在","water_units":"读取水量","lt":"小于比较","min":"取较小值","add":"相加","sub":"相减","and":"同时满足","not":"条件取反","set_light":"设置发光","move":"移动一格","take_water":"从造物取水","take_environment_water":"从环境取水","release_environment_water":"排水到环境","call":"调用已发布模块"}
@@ -19,6 +20,7 @@ var title_label: Label
 var state_label: Label
 var summary: Label
 var validation: Label
+var preview_label: Label
 var amount: SpinBox
 var preset_box: OptionButton
 var cards: VBoxContainer
@@ -58,8 +60,10 @@ func _ready() -> void:
 	history.add_child(Style.button("重做",func(): _result(document.redo())))
 	var edit:=Style.button("节点与连线",open_advanced);edit.name="OpenGraph";edit.size_flags_horizontal=Control.SIZE_EXPAND_FILL;history.add_child(edit)
 	validation=Style.note("先检查，再应用。");validation.custom_minimum_size.y=38;col.add_child(validation)
+	preview_label=validation;preview_label.name="PreviewResult"
 	var actions:=HBoxContainer.new();col.add_child(actions)
 	actions.add_child(Style.button("校验草稿",validate_graph))
+	var trial:=Style.button("预演一拍",preview_graph);trial.name="PreviewRule";actions.add_child(trial)
 	var apply:=Style.button("应用到造物",func(): apply_requested.emit());apply.name="ApplyRule";apply.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	apply.add_theme_color_override("font_color",Style.GOLD);actions.add_child(apply)
 	var share:=HBoxContainer.new();col.add_child(share)
@@ -96,6 +100,8 @@ func _refresh() -> void:
 	_queued=false
 	if not is_inside_tree():return
 	_syncing=true
+	preview_label.text="草稿可预演；只有应用后才会改变正式行为。"
+	preview_label.tooltip_text=""
 	var m: Dictionary=document.snapshot()
 	for child in cards.get_children():cards.remove_child(child);child.queue_free()
 	var groups: Array=[[],[],[]]
@@ -121,9 +127,21 @@ func _refresh() -> void:
 	_syncing=false
 func validate_graph() -> void:
 	if runtime==null:return
+	validation.tooltip_text=""
 	var result: Dictionary=document.validate(runtime)
 	validation.text="规则校验通过。应用后开始使用新版本。" if result.ok else "规则未通过："+_error_text(result.error)
 	validation.add_theme_color_override("font_color",Style.AQUA if result.ok else Style.BAD)
+func preview_graph() -> Dictionary:
+	if runtime==null:return {"ok":false,"error":"runtime_not_ready"}
+	var candidate:Dictionary=document.candidate(runtime)
+	var result:Dictionary=candidate
+	if candidate.ok:
+		result=runtime.preview_rule_tick(target_id,candidate.text,{"id":candidate.module.id,"version":candidate.module.version})
+	preview_label.text=Feedback.preview(result)
+	preview_label.tooltip_text=Feedback.checks(result.get("outcome",{})) if result.ok else ""
+	var failed:bool=not result.ok or result.get("outcome",{}).get("status","") in ["blocked","error","aborted"]
+	preview_label.add_theme_color_override("font_color",Style.BAD if failed else Style.AQUA)
+	return result
 func _error_text(code: String) -> String:
 	return {"missing_input_port":"存在未连接的输入端口","missing_reference_or_type_mismatch":"连线类型不匹配或引用已丢失","data_cycle":"数据连线形成循环","module_collection_budget":"空白规则尚无有效节点","referenced_draft_node":"该节点仍被引用，请先断开连线","version_content_conflict":"旧版本不可覆盖，请发布新版本"}.get(code,code)
 func _make_advanced() -> void:

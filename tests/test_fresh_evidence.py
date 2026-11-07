@@ -13,7 +13,7 @@ class FreshEvidenceTests(unittest.TestCase):
     {'id':self.c['vessel_id'],'material_id':'user:reservoir','location':{'kind':'inventory','owner':'player:local'},'state':{'water_units':5500,'capacity_units':6000,'light_on':False},'rules':[{'id':self.c['pump']['id'],'version':1}]},
     {'id':self.c['lamp_id'],'material_id':'user:crystal','location':{'kind':'world','cell':[9,-1]},'state':{'water_units':0,'capacity_units':1,'light_on':True},'rules':[{'id':'core:portable_lamp','version':1}]}]
   rules=copy.deepcopy(self.s['rules']);rules['modules'].append(copy.deepcopy(self.c['pump']))
-  play={'format':'rw.play/0.1','motion':{'velocity_x':0,'velocity_y':0},'expedition':{'format':'rw.expedition/0.1','scenario_id':self.s['definition']['id'],'scenario_version':1,'completed':self.c['completed'],'simulation':{'format':'rw.simulation/0.2','tick':100,'clock':{**self.s['clock'],'paused':True},'world':w,'rules':rules}}}
+  play={'format':'rw.play/0.1','motion':{'velocity_x':0,'velocity_y':0},'expedition':{'format':'rw.expedition/0.1','scenario_id':self.s['definition']['id'],'scenario_version':self.s['definition']['version'],'completed':self.c['completed'],'simulation':{'format':'rw.simulation/0.2','tick':100,'clock':{**self.s['clock'],'paused':True},'world':w,'rules':rules}}}
   self.d={'format':'rw.workspace/0.1','play':play,'editor':{'selected':self.c['vessel_id'],'tool':'lamp','drafts':{self.c['vessel_id']:copy.deepcopy(self.c['unfinished'])}}}
  def validate(self,text=None):
   p=ROOT/'tools/check_fresh_evidence.py';self.assertTrue(p.exists(),'fresh checkpoint independent validator missing')

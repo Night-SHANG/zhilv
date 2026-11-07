@@ -13,6 +13,7 @@ var _budget: int
 var _spent: int = 0
 var _error: String = ""
 var _commands: Array = []
+var _checks: Array = []
 var _module: String = ""
 var _node: String = ""
 
@@ -28,13 +29,14 @@ func run(program: Dictionary, entity: Dictionary, view: Dictionary, night: bool,
 	_spent = 0
 	_error = ""
 	_commands = []
+	_checks = []
 	var refs: Array = entity.rules.duplicate(true)
 	refs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.id < b.id)
 	for ref in refs:
 		_execute(Compiler.key(ref.id, ref.version), {}, 1)
 		if not _error.is_empty():
 			break
-	return {"ok": _error.is_empty(), "error": _error, "commands": _commands if _error.is_empty() else [], "spent": _spent, "module": _module, "node": _node}
+	return {"ok": _error.is_empty(), "error": _error, "commands": _commands if _error.is_empty() else [], "spent": _spent, "module": _module, "node": _node, "checks": _checks.duplicate(true)}
 
 func _spend(module_key: String, node_id: String) -> bool:
 	_module = module_key
@@ -62,6 +64,9 @@ func _execute(module_key: String, overrides: Dictionary, depth: int) -> void:
 		var when: Variant = _value(module_key, n.inputs.when, parameters, cache)
 		if not _error.is_empty():
 			return
+		# 只保留有界条件求值证据；enabled表示形成计划，不代表已经提交。
+		if _checks.size() < 64:
+			_checks.append({"module":module_key,"node":id,"op":n.op,"enabled":bool(when)})
 		if not when:
 			continue
 		var args: Dictionary = {}

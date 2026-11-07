@@ -111,4 +111,8 @@ func _run()->void:
 	for suffix in ["", ".bak", ".tmp"]:
 		var path:String=app._files.slot_path("fresh_route014")+suffix
 		if FileAccess.file_exists(path):DirAccess.remove_absolute(path)
+	await _continue_after_first_section(vessel,lamp)
 	app.queue_free();await frames(2);finish()
+
+func _continue_after_first_section(_vessel:String,_lamp:String)->void:
+	pass

@@ -9,6 +9,8 @@ const Style = preload("res://presentation/ui_theme.gd")
 const Codec = preload("res://runtime/snapshot_codec.gd")
 const Recipes=preload("res://runtime/creation_recipes.gd")
 const InventoryPanel=preload("res://presentation/inventory_panel.gd")
+const Guide=preload("res://presentation/expedition_guide.gd")
+const Feedback=preload("res://presentation/execution_text.gd")
 const Workspace=preload("res://presentation/workspace_checkpoint.gd")
 const DEFAULT_SLOT: String="first_expedition_014"
 const DEFAULT_SCENARIO: String="res://content/fresh_expedition.json"
@@ -33,6 +35,7 @@ var _clock_label: Label
 var _objective_label: Label
 var _inventory_label: Label
 var _status_label: Label
+var _feedback_label: Label
 var _tools: Array=[]
 var _file_dialog: FileDialog
 var _confirm: ConfirmationDialog
@@ -64,7 +67,7 @@ func _build_ui() -> void:
 	var row:=HBoxContainer.new();row.add_theme_constant_override("separation",16);header.add_child(row)
 	row.add_child(Style.label("织律",29,Style.GOLD))
 	var brand:=VBoxContainer.new();brand.add_theme_constant_override("separation",0);row.add_child(brand)
-	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.14 · 开发构建",12,Style.MUTED))
+	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.15 · 开发构建",12,Style.MUTED))
 	var spacer:=Control.new();spacer.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(spacer)
 	_clock_label=Style.label("第 1 日 · 白昼",14);row.add_child(_clock_label)
 	_pause_button=Style.button("开始探索",_toggle_pause);_pause_button.name="PauseButton";row.add_child(_pause_button)
@@ -80,6 +83,7 @@ func _build_ui() -> void:
 	var objective_col:=VBoxContainer.new();objective_col.add_theme_constant_override("separation",5);objectives.add_child(objective_col)
 	_objective_label=Style.label("探索目标",16,Style.GOLD);_objective_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;objective_col.add_child(_objective_label)
 	_inventory_label=Style.label("",14,Style.MUTED);_inventory_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;objective_col.add_child(_inventory_label)
+	_feedback_label=Style.note("");_feedback_label.name="ExecutionFeedback";objective_col.add_child(_feedback_label)
 	loom=Loom.new();loom.name="LoomPanel";loom.visible=false;_body.add_child(loom)
 	loom.apply_requested.connect(func():_report(apply_draft(),"规则已应用到所选造物；关闭织律台后继续探索"))
 	loom.close_requested.connect(close_loom)
@@ -136,16 +140,19 @@ func _refresh_hud() -> void:
 	_clock_label.text="第 %d 日 · %s"%[int(clock.tick/clock.cycle_ticks)+1,"夜晚" if clock.night else "白昼"]
 	_pause_button.text="继续探索" if clock.paused else "暂停  Esc"
 	_pause_button.disabled=loom.visible or inventory.visible or _file_dialog.visible or _confirm.visible
-	var completed: Array=expedition.status().completed
-	_objective_label.text=("✓ 已到访遗迹" if completed.has("goal:ruins") else "① 排开积水，携灯到访右侧遗迹")+"   /   "+("✓ 已交水 500" if completed.has("goal:irrigate") else "② 回营地交付 500 单位水")
+	var guidance:Dictionary=guidance_state()
+	_objective_label.text="%d / %d · %s\n%s"%[guidance.completed,guidance.total,guidance.title,guidance.detail]
+	viewport_canvas.objective_markers=guidance.markers
 	var items:Array=player_items()
-	if items.is_empty() and world.get_instance(selected_id).is_empty():
-		_objective_label.text="先挖掘头顶石料 → B 制作容器（4）和夜灯（2） → 选择你自己的排水办法"
 	var item: Dictionary=world.get_instance(selected_id)
 	var detail: String="B 打开背包制作与选择造物"
 	if not item.is_empty():
 		detail="%s · 水量 %d / %d · %s"%[Recipes.label(item),item.state.water_units,item.state.capacity_units,"背包中" if item.location.kind=="inventory" else "世界中"]
 	_inventory_label.text="石块 %d   |   %s"%[world.stack_count("core:stone"),detail]
+	var feedback:Dictionary=runtime.execution_feedback(selected_id) if not item.is_empty() else {}
+	_feedback_label.text=Feedback.live(feedback)
+	_feedback_label.visible=not _feedback_label.text.is_empty()
+	_feedback_label.tooltip_text=Feedback.checks(feedback)
 	viewport_canvas.selected_id=selected_id;viewport_canvas.tool=tool
 	for i in _tools.size():_tools[i].set_pressed_no_signal(TOOLS[i]==tool)
 	if inventory.visible:inventory.refresh(items,selected_id,world.stack_count("core:stone"),item)
@@ -363,9 +370,12 @@ func _report(result: Dictionary,success: String) -> void:
 	if result.ok:_notify(result.get("message",success))
 	else:_notify(_error(result.get("error","unknown")),true)
 func _error(code: String) -> String:
-	return {"no_carried_tool":"没有这种造物。按 B 制作或选择一件随身造物。","craft_missing_materials":"材料不足，世界与背包未改变。","unknown_recipe":"没有这种受信载体配方。","open_inventory_first":"请先打开背包制作。","workspace_selected_missing":"存档中的选中造物不存在，当前进度未改变。","play_paused":"世界已暂停。先点击继续探索，再操作地形与物品。","play_controls_disabled":"界面正在编辑或选择文件；先关闭面板再操作世界。","out_of_reach":"距离太远，请走近一些（最多 4 格）。","occluded":"被墙体挡住了，不能隔墙操作。","occupied_cell":"这里被地形、角色、造物或深水占用；试试水面上方的空格。","not_in_inventory":"造物已经在世界里，请右键收回后再放置。","no_creation_here":"这个格子没有可收回的造物。","no_water_or_capacity":"没有可转移的水，或容器／格子容量已满。","no_published_rule":"所选造物还没有已发布的规则，请先在织律台应用。","referenced_draft_node":"节点仍被其他节点引用，请先断开连线。","no_valid_checkpoint":"没有找到可用存档，当前世界保持不变。","missing_input_port":"规则还有未连接的端口，未应用任何修改。","missing_reference_or_type_mismatch":"规则连线的类型不匹配，未应用任何修改。","data_cycle":"规则图形成循环，不能发布。","version_content_conflict":"同一规则版本不能覆盖，请以新版本发布。","insufficient_water":"水量不足，操作未改变世界。","no_terrain":"这里没有可挖掘的地形。"}.get(code,"操作未完成（"+code+"）；世界保持原状态。")
+	return {"no_carried_tool":"没有这种造物。按 B 制作或选择一件随身造物。","craft_missing_materials":"材料不足，世界与背包未改变。","unknown_recipe":"没有这种受信载体配方。","open_inventory_first":"请先打开背包制作。","workspace_selected_missing":"存档中的选中造物不存在，当前进度未改变。","play_paused":"世界已暂停。先点击继续探索，再操作地形与物品。","play_controls_disabled":"界面正在编辑或选择文件；先关闭面板再操作世界。","out_of_reach":"距离太远，请走近一些（最多 4 格）。","occluded":"被墙体挡住了，不能隔墙操作。","occupied_cell":"这里有地形、角色、造物或残水；等待水流离开，或先用取水工具清理。","not_in_inventory":"造物已经在世界里，请右键收回后再放置。","no_creation_here":"这个格子没有可收回的造物。","no_water_or_capacity":"没有可转移的水，或容器／格子容量已满。","no_published_rule":"所选造物还没有已发布的规则，请先在织律台应用。","referenced_draft_node":"节点仍被其他节点引用，请先断开连线。","no_valid_checkpoint":"没有找到可用存档，当前世界保持不变。","missing_input_port":"规则还有未连接的端口，未应用任何修改。","missing_reference_or_type_mismatch":"规则连线的类型不匹配，未应用任何修改。","data_cycle":"规则图形成循环，不能发布。","version_content_conflict":"同一规则版本不能覆盖，请以新版本发布。","insufficient_water":"水量不足，操作未改变世界。","no_terrain":"这里没有可挖掘的地形。"}.get(code,"操作未完成（"+code+"）；世界保持原状态。")
 func _notify(text: String,bad: bool=false) -> void:
 	_last_status=text
 	if is_instance_valid(_status_label):_status_label.text=text;_status_label.add_theme_color_override("font_color",Style.BAD if bad else Style.MUTED)
 func _exit_tree() -> void:
 	if play!=null and is_instance_valid(play):play.dispose()
+
+func guidance_state()->Dictionary:
+	return Guide.evaluate(world,expedition)

@@ -10,10 +10,13 @@ var _definition: Dictionary = {}
 var _completed: Array = []
 var _world_id: String = ""
 var _busy: bool = false
+var _compatible_versions: Dictionary = {}
 
 func attach(runtime, world, definition: Variant) -> Dictionary:
 	if _busy or runtime == null or world == null or runtime._world != world or runtime.clock_state().is_empty() or world.rule_view().is_empty(): return Codec.reject("invalid_expedition_binding")
-	if not Codec._shape(definition,["id","version","objectives"]) or not Codec.identifier(definition.id) or not Codec._integer(definition.version,1,2147483647) or not definition.objectives is Array or definition.objectives.is_empty() or definition.objectives.size()>16:
+	var fields:Array=["id","version","objectives"]
+	if definition is Dictionary and definition.has("compatible_versions"):fields.append("compatible_versions")
+	if not Codec._shape(definition,fields) or not Codec.identifier(definition.id) or not Codec._integer(definition.version,1,2147483647) or not definition.objectives is Array or definition.objectives.is_empty() or definition.objectives.size()>16:
 		return Codec.reject("scenario_definition")
 	var normalized: Dictionary=definition.duplicate(true)
 	normalized.version=int(normalized.version)
@@ -29,12 +32,27 @@ func attach(runtime, world, definition: Variant) -> Dictionary:
 			"visit":
 				if not Codec._shape(goal,["id","type","requires","cell","lit","max_water"]) or not WorldCodec.cell_valid(goal.cell) or typeof(goal.lit)!=TYPE_BOOL or not Codec._integer(goal.max_water,0,1000): return Codec.reject("visit_goal")
 				goal.cell=[int(goal.cell[0]),int(goal.cell[1])]; goal.max_water=int(goal.max_water)
+			"supply":
+				if not Codec._shape(goal,["id","type","requires","cell","water_units"]) or not WorldCodec.cell_valid(goal.cell) or not Codec._integer(goal.water_units,1,Codec.MAX_QUANTITY):return Codec.reject("supply_goal")
+				goal.cell=[int(goal.cell[0]),int(goal.cell[1])];goal.water_units=int(goal.water_units)
 			"deliver":
 				if not Codec._shape(goal,["id","type","requires","instance","water_units"]) or not Codec.identifier(goal.instance) or not Codec._integer(goal.water_units,1,Codec.MAX_QUANTITY): return Codec.reject("delivery_goal")
 				goal.water_units=int(goal.water_units)
 			_:
 				return Codec.reject("unknown_goal_type")
 		ids[goal.id]=true
+	# 兼容性由受信场景声明：只接收旧版的目标前缀，不静默认可未知新目标。
+	var compatible:Dictionary={}
+	var migrations:Variant=normalized.get("compatible_versions",[])
+	if not migrations is Array or migrations.size()>8:return Codec.reject("scenario_migrations")
+	var ordered:Array=[]
+	for goal in normalized.objectives:ordered.append(goal.id)
+	for migration in migrations:
+		if not Codec._shape(migration,["version","goal_ids"]) or not Codec._integer(migration.version,1,normalized.version-1) or not migration.goal_ids is Array or migration.goal_ids.is_empty() or migration.goal_ids.size()>ordered.size():return Codec.reject("scenario_migration_fields")
+		var version:int=int(migration.version)
+		if compatible.has(version) or migration.goal_ids!=ordered.slice(0,migration.goal_ids.size()):return Codec.reject("scenario_migration_not_prefix")
+		compatible[version]=migration.goal_ids.duplicate()
+	_compatible_versions=compatible
 	_runtime=runtime; _world=world; _definition=normalized; _completed=[]
 	_world_id=world.rule_view().entities.world_id
 	return {"ok":true,"error":""}
@@ -51,6 +69,10 @@ func _observe() -> void:
 			var target:=Vector2i(goal.cell[0],goal.cell[1])
 			satisfied=_world.actor_cell()==target and _world.water_at(target)<=goal.max_water and _world.water_at(target+Vector2i.UP)<=goal.max_water
 			if satisfied and goal.lit: satisfied=_world.has_light_at(target,_runtime.clock_state().night)
+		elif goal.type=="supply":
+			var target:=Vector2i(goal.cell[0],goal.cell[1])
+			var entity:Dictionary=_world.get_instance(_world.instance_at(target))
+			satisfied=not entity.is_empty() and entity.state.water_units>=goal.water_units and _world._access(target).ok
 		else:
 			var entity: Dictionary=_world.get_instance(goal.instance)
 			satisfied=not entity.is_empty() and entity.location.kind=="world" and entity.state.water_units>=goal.water_units and _world._accessible_instance(goal.instance).ok
@@ -123,8 +145,13 @@ func validate_checkpoint(text: String) -> Dictionary:
 
 func validate_checkpoint_value(d: Variant) -> Dictionary:
 	if _runtime==null: return Codec.reject("expedition_unbound")
-	if not Codec._shape(d,["format","scenario_id","scenario_version","completed","simulation"]) or d.format!="rw.expedition/0.1" or d.scenario_id!=_definition.id or not Codec._integer(d.scenario_version,1,2147483647) or int(d.scenario_version)!=_definition.version or not d.completed is Array or d.completed.size()>16:
+	if not Codec._shape(d,["format","scenario_id","scenario_version","completed","simulation"]) or d.format!="rw.expedition/0.1" or d.scenario_id!=_definition.id or not Codec._integer(d.scenario_version,1,2147483647) or not d.completed is Array or d.completed.size()>16:
 		return Codec.reject("expedition_fields")
+	var version:int=int(d.scenario_version)
+	if version!=_definition.version:
+		if not _compatible_versions.has(version):return Codec.reject("scenario_version_incompatible")
+		for id in d.completed:
+			if not id in _compatible_versions[version]:return Codec.reject("legacy_completed_new_goal")
 	var accepted: Array=[]
 	for goal in _definition.objectives:
 		if not d.completed.has(goal.id): continue
@@ -155,3 +182,6 @@ func adopt_checked_checkpoint(checked: Dictionary) -> Dictionary:
 	changed.emit()
 	_busy=false
 	return {"ok":true,"error":""}
+
+func objective_definitions()->Array:
+	return _definition.get("objectives",[]).duplicate(true)
