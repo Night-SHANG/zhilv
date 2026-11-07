@@ -110,7 +110,7 @@ func _draw() -> void:
 	for e in snapshot.entities.instances:
 		if e.location.kind!="world": continue
 		var p:=Vector2(e.location.cell[0],e.location.cell[1])*16
-		if e.id=="creation:lamp":
+		if e.material_id=="user:crystal":
 			if e.state.light_on: _glow(p+Vector2(8,8),Style.GOLD,36)
 			_rect(p+Vector2(4,2),Vector2(8,12),Color("c69856")); _rect(p+Vector2(5,4),Vector2(6,8),Style.GOLD if e.state.light_on else Color("384854"))
 			draw_arc(p+Vector2(8,2),3,PI,TAU,8,Color("d4bd89"),1)

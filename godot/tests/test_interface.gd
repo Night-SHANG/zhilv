@@ -14,6 +14,7 @@ func _run() -> void:
 	root.size=Vector2i(1440,900)
 	var scene=load("res://presentation/main.tscn").instantiate(); root.add_child(scene)
 	await process_frame
+	scene.new_game("res://content/first_expedition.json")
 	check(scene.setup_complete,"main_uses_real_session")
 	if not scene.setup_complete: scene.queue_free(); await process_frame; finish(); return
 	check(scene.world.total_water_units()==6000,"initial_world_water_is_not_visual_fake")

@@ -129,3 +129,13 @@ func instance_at(cell: Vector2i) -> String:
 		if entity.location.kind == "world" and Vector2i(entity.location.cell[0],entity.location.cell[1]) == cell:
 			return entity.id
 	return ""
+
+func _insert_instance(entity: Dictionary) -> Dictionary:
+	## 内部制作事务使用；不向玩家规则开放任意实例注入。
+	if _state.is_empty():return Codec.reject("store_not_loaded")
+	if _state.instances.size()>=4096:return Codec.reject("instance_budget")
+	if not Codec.identifier(entity.get("id")) or _indices.has(entity.id):return Codec.reject("invalid_or_duplicate_instance_id")
+	var candidate: Dictionary=_state.duplicate(true)
+	candidate.stacks=_inventory.to_dict()
+	candidate.instances.append(entity.duplicate(true))
+	return load_checkpoint(JSON.stringify(candidate))

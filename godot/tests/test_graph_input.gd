@@ -13,6 +13,7 @@ func mouse(window: Window,p: Vector2,pressed: bool) -> void:
 func _run() -> void:
 	root.size=Vector2i(1440,900)
 	var app=load("res://presentation/main.tscn").instantiate();root.add_child(app);await frames()
+	app.new_game("res://content/first_expedition.json");await frames()
 	app.open_loom();app.loom.document.preset("lamp");await frames()
 	app.loom.document.disconnect_port("light","value");await frames()
 	app.loom.open_advanced();await frames()

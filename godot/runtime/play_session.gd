@@ -154,6 +154,16 @@ func command(value: Variant) -> Dictionary:
 	_busy=false
 	return result
 
+## 制作仅允许在暂停的背包操作中，不开放其他世界命令。
+func craft_in_inventory(recipe: Variant) -> Dictionary:
+	if _busy or _world == null: return Codec.reject("play_busy_or_unbound")
+	if not _expedition.clock_state().paused or _controls: return Codec.reject("craft_requires_inventory_pause")
+	_busy=true
+	var result: Dictionary=_expedition.act({"op":"craft","recipe":recipe})
+	if result.ok: changed.emit()
+	_busy=false
+	return result
+
 func single_step() -> Dictionary:
 	if _busy or _world == null or not _expedition.clock_state().paused: return Codec.reject("play_step_requires_pause")
 	_busy=true

@@ -7,6 +7,8 @@ const Codec = preload("res://runtime/snapshot_codec.gd")
 const WorldCodec = preload("res://runtime/world_codec.gd")
 const WaterFlow = preload("res://runtime/water_flow.gd")
 const Store = preload("res://runtime/instance_store.gd")
+const Recipes = preload("res://runtime/creation_recipes.gd")
+var _crafting: bool = false
 const REACH_SQUARED: int = 16
 var _catalog: Dictionary
 var _snapshot: Dictionary = {}
@@ -297,7 +299,7 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 				if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
 				var target: Vector2i
 				if command.op == "take_environment_water":
-					if not Codec._shape(command,["op","cell","amount"]) or not command.cell is Vector2i: return Codec.reject("environment_command_fields")
+					if not Codec._shape(command, ["op","cell","amount"]) or not command.cell is Vector2i: return Codec.reject("environment_command_fields")
 					target = command.cell
 				else:
 					if not Codec._shape(command,["op","dx","dy","amount"]) or typeof(command.dx)!=TYPE_INT or typeof(command.dy)!=TYPE_INT or absi(command.dx)+absi(command.dy)!=1: return Codec.reject("environment_command_fields")
@@ -456,3 +458,29 @@ func move_actor_body(foot: Vector2i) -> Dictionary:
 
 func instance_at(cell: Vector2i) -> String:
 	return str(_occupants.get(cell, ""))
+
+func craft(recipe_id: Variant) -> Dictionary:
+	## 材料扣除与独立造物创建在同一份暂存状态中完成；失败不改世界。
+	if _snapshot.is_empty() or _crafting:return Codec.reject("craft_busy_or_unbound")
+	var recipe: Dictionary=Recipes.recipe(recipe_id)
+	if recipe.is_empty():return Codec.reject("unknown_recipe")
+	for material in recipe.cost:
+		if stack_count(material)<recipe.cost[material]:return Codec.reject("craft_missing_materials")
+	var stage=_staged_store()
+	for material in recipe.cost:
+		var removed: Dictionary=stage.change_stack(material,-int(recipe.cost[material]))
+		if not removed.ok:return removed
+	var number:int=1
+	var id:String="creation:made_%06d"%number
+	while not get_instance(id).is_empty():
+		number+=1;id="creation:made_%06d"%number
+	var item: Dictionary={"id":id,"material_id":recipe.material_id,"rules":recipe.rules,
+		"state":{"water_units":0,"capacity_units":recipe.capacity_units,"light_on":false},
+		"location":{"kind":"inventory","owner":_snapshot.actor.id}}
+	var inserted: Dictionary=stage._insert_instance(item)
+	if not inserted.ok:return inserted
+	_crafting=true
+	var result: Dictionary=_commit(stage,_terrain,_snapshot.actor.duplicate(true),[])
+	_crafting=false
+	if result.ok:result["id"]=id
+	return result

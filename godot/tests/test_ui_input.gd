@@ -38,6 +38,7 @@ func _run() -> void:
 	root.size=Vector2i(1440,900)
 	app=load("res://presentation/main.tscn").instantiate();root.add_child(app)
 	await frames(3)
+	app.new_game("res://content/first_expedition.json");await frames(2)
 	check(app.setup_complete,"native_ui_scene_started")
 	if not app.setup_complete:finish();return
 	await click_control(app._pause_button)

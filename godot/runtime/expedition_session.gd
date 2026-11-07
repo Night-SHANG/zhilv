@@ -77,16 +77,17 @@ static func _cell(value: Variant) -> bool:
 func act(command: Variant) -> Dictionary:
 	if _busy or _runtime==null or _runtime._busy: return Codec.reject("expedition_busy_or_unbound")
 	if not command is Dictionary or not command.get("op") is String: return Codec.reject("invalid_player_command")
-	var expected: Dictionary={"move":["op","delta"],"mine":["op","cell"],"build":["op","cell","material"],"pickup":["op","id"],"place":["op","id","cell"],"collect":["op","id","cell","amount"],"release":["op","id","cell","amount"],"pour":["op","source","target","amount"],"advance":["op"],"single_step":["op"],"pause":["op","value"]}
+	var expected: Dictionary={"craft":["op","recipe"],"move":["op","delta"],"mine":["op","cell"],"build":["op","cell","material"],"pickup":["op","id"],"place":["op","id","cell"],"collect":["op","id","cell","amount"],"release":["op","id","cell","amount"],"pour":["op","source","target","amount"],"advance":["op"],"single_step":["op"],"pause":["op","value"]}
 	if not expected.has(command.op) or not Codec._shape(command,expected[command.op]): return Codec.reject("player_command_fields")
 	for key in ["cell","delta"]:
 		if command.has(key) and not _cell(command[key]): return Codec.reject("invalid_player_cell")
-	for key in ["id","source","target","material"]:
+	for key in ["id","source","target","material","recipe"]:
 		if command.has(key) and not Codec.identifier(command[key]): return Codec.reject("invalid_player_id")
 	if command.has("amount") and (typeof(command.amount)!=TYPE_INT or command.amount<1 or command.amount>Codec.MAX_QUANTITY): return Codec.reject("invalid_player_amount")
 	_busy=true
 	var result: Dictionary
 	match command.op:
+		"craft": result=_world.craft(command.recipe)
 		"move": result=_world.step_actor(Vector2i(command.delta[0],command.delta[1]))
 		"mine": result=_world.mine(Vector2i(command.cell[0],command.cell[1]))
 		"build": result=_world.build(command.material,Vector2i(command.cell[0],command.cell[1]))
