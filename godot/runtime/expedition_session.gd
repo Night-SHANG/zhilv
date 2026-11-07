@@ -105,9 +105,12 @@ func act(command: Variant) -> Dictionary:
 	_busy=false
 	return result
 
+func checkpoint_value() -> Dictionary:
+	if _runtime==null: return {}
+	return {"format":"rw.expedition/0.1","scenario_id":_definition.id,"scenario_version":_definition.version,"completed":_completed.duplicate(),"simulation":_runtime.checkpoint_value()}
+
 func checkpoint_json() -> String:
-	if _runtime==null: return "{}"
-	return JSON.stringify({"format":"rw.expedition/0.1","scenario_id":_definition.id,"scenario_version":_definition.version,"completed":_completed.duplicate(),"simulation":_runtime.checkpoint_value()})
+	return JSON.stringify(checkpoint_value())
 
 func validate_checkpoint(text: String) -> Dictionary:
 	if _runtime==null: return Codec.reject("expedition_unbound")
@@ -115,7 +118,10 @@ func validate_checkpoint(text: String) -> Dictionary:
 	if not error.is_empty(): return Codec.reject(error)
 	var parser:=JSON.new()
 	if parser.parse(text)!=OK: return Codec.reject("expedition_json")
-	var d: Variant=parser.data
+	return validate_checkpoint_value(parser.data)
+
+func validate_checkpoint_value(d: Variant) -> Dictionary:
+	if _runtime==null: return Codec.reject("expedition_unbound")
 	if not Codec._shape(d,["format","scenario_id","scenario_version","completed","simulation"]) or d.format!="rw.expedition/0.1" or d.scenario_id!=_definition.id or not Codec._integer(d.scenario_version,1,2147483647) or int(d.scenario_version)!=_definition.version or not d.completed is Array or d.completed.size()>16:
 		return Codec.reject("expedition_fields")
 	var accepted: Array=[]
@@ -134,6 +140,11 @@ func load_checkpoint(text: String) -> Dictionary:
 	if _busy or _runtime==null or _runtime._busy: return Codec.reject("expedition_busy_or_unbound")
 	var checked: Dictionary=validate_checkpoint(text)
 	if not checked.ok: return checked
+	return adopt_checked_checkpoint(checked)
+
+func adopt_checked_checkpoint(checked: Dictionary) -> Dictionary:
+	# 内部协调接口；调用方必须已经通过完整信封验证。
+	if _busy or _runtime==null or _runtime._busy: return Codec.reject("expedition_busy_or_unbound")
 	var simulation: Dictionary=checked.simulation
 	var prepared: Dictionary=_world._prepare_rule_revision(simulation.program.catalog.rules,simulation.world)
 	if not prepared.ok: return prepared

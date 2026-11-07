@@ -46,3 +46,6 @@ func dispose() -> void:
 	set_physics_process(false)
 	_runtime = null
 	_accumulator = 0.0
+
+func reset_accumulator() -> void:
+	_accumulator = 0.0

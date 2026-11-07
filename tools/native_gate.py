@@ -11,6 +11,7 @@ from check_world import validate_world
 from check_rule_evidence import validate_fixture_result
 from check_authoring_evidence import validate_authoring_result
 from check_environment_evidence import validate_expedition_result
+from check_play_evidence import validate_native_play, validate_live_expedition
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -43,6 +44,12 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
     env['RULEWEAVER_NATIVE_AUTHORING'] = str(authoring_evidence)
     expedition_evidence = reports.resolve() / 'native_expedition.json'
     env['RULEWEAVER_NATIVE_EXPEDITION'] = str(expedition_evidence)
+    actor_evidence = reports.resolve() / 'native_actor.json'
+    play_evidence = reports.resolve() / 'native_play.json'
+    live_evidence = reports.resolve() / 'native_live_expedition.json'
+    env['RULEWEAVER_NATIVE_ACTOR'] = str(actor_evidence)
+    env['RULEWEAVER_NATIVE_PLAY'] = str(play_evidence)
+    env['RULEWEAVER_NATIVE_LIVE_EXPEDITION'] = str(live_evidence)
     expected = json.loads((ROOT / 'toolchain.lock.json').read_text(encoding='utf-8'))['godot_version']
     try:
         version = subprocess.run([path, '--version'], capture_output=True, text=True,
@@ -56,10 +63,14 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         rules_evidence.unlink(missing_ok=True)
         authoring_evidence.unlink(missing_ok=True)
         expedition_evidence.unlink(missing_ok=True)
+        for file in (actor_evidence, play_evidence, live_evidence):
+            file.unlink(missing_ok=True)
         suites = []
-        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT'), ('authoring', 'AUTHORING_TEST_RESULT'), ('draft', 'DRAFT_TEST_RESULT'), ('water', 'WATER_TEST_RESULT'), ('environment', 'ENVIRONMENT_TEST_RESULT'), ('expedition', 'EXPEDITION_TEST_RESULT'), ('environment_edges', 'ENVIRONMENT_EDGES_TEST_RESULT')):
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT'), ('authoring', 'AUTHORING_TEST_RESULT'), ('draft', 'DRAFT_TEST_RESULT'), ('water', 'WATER_TEST_RESULT'), ('environment', 'ENVIRONMENT_TEST_RESULT'), ('expedition', 'EXPEDITION_TEST_RESULT'), ('environment_edges', 'ENVIRONMENT_EDGES_TEST_RESULT'), ('actor_body', 'ACTOR_BODY_TEST_RESULT'), ('platform', 'PLATFORM_TEST_RESULT'), ('play_session', 'PLAY_SESSION_TEST_RESULT'), ('live_expedition', 'LIVE_EXPEDITION_TEST_RESULT')):
             cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
                    '--script', 'res://tests/test_' + name + '.gd']
+            if name in ('platform', 'play_session', 'live_expedition'):
+                cmd[2:2] = ['--fixed-fps', '60']
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
                                   errors='replace', timeout=90, env=env)
             output = proc.stdout + '\n' + proc.stderr
@@ -81,9 +92,12 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
             scenario = json.loads((ROOT/'godot/content/wet_ruins.json').read_text(encoding='utf-8'))
             contract = json.loads((ROOT/'fixtures/environment_contract.json').read_text(encoding='utf-8'))
             validate_expedition_result(expedition_evidence.read_text(encoding='utf-8'), scenario, contract)
+            validate_world(actor_evidence.read_text(encoding='utf-8'), catalog)
+            validate_native_play(play_evidence.read_text(encoding='utf-8'), catalog)
+            validate_live_expedition(live_evidence.read_text(encoding='utf-8'), scenario, contract)
             cross = 'PASS'
-        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross, 'native_authoring_python_validation': cross, 'native_expedition_python_validation': cross,
-                'scope': 'headless world, typed rules, conservative environment water, fixed clock and three expedition routes; no player UI, GPU or performance acceptance'}
+        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross, 'native_authoring_python_validation': cross, 'native_expedition_python_validation': cross, 'native_actor_python_validation': cross, 'native_play_python_validation': cross, 'native_live_expedition_python_validation': cross,
+                'scope': 'headless world, rules, water, native CharacterBody2D/input/save and real-time expedition route; no approved player UI, GPU or hand-feel acceptance'}
     except FileNotFoundError as exc:
         # 启动前缺引擎，不是原生断言通过；启动后缺输出则判失败。
         return {'status': 'FAIL' if 'suites' in locals() else 'BLOCKED', 'reason': str(exc)}

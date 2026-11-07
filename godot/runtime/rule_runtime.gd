@@ -312,7 +312,7 @@ func _timed_step(force: bool, per_instance_budget: Variant, total_budget: Varian
 		_busy = false
 		return result
 	var fluid: Dictionary = {"ok":true,"error":"","operations":0,"changed":0}
-	if shadow_world.rule_view().format == "rw.world/0.2": fluid = shadow_world.advance_water(water_budget)
+	if WorldCodec.has_environment(shadow_world.rule_view()): fluid = shadow_world.advance_water(water_budget)
 	if not fluid.ok:
 		_busy = false
 		return fluid

@@ -1,5 +1,5 @@
 extends RefCounted
-## 单角色、有限活跃格的权威交互入口；不是角色物理或可执行玩家脚本。
+## 单角色、有限活跃格的权威交互入口；原生角色运动必须提交完整亚格身体占位。
 ## 本轮使用有界完整快照事务以保证失败不部分提交；大世界增量优化尚未验收。
 signal committed(cells: Array)
 signal reloaded
@@ -72,7 +72,7 @@ func occupied_cells() -> Array:
 	return _terrain.keys() + _occupants.keys()
 
 func _actor_at(cell: Vector2i) -> bool:
-	return cell == actor_cell() or cell == actor_cell() + Vector2i.UP
+	return actor_occupied_cells().has(cell)
 
 func _blocks_ray(cell: Vector2i, target: Vector2i) -> bool:
 	return cell != target and not material_at(cell).is_empty()
@@ -133,8 +133,8 @@ func _commit(stage, terrain: Dictionary, actor: Dictionary, changed: Array, wate
 	if not normalized.ok:
 		return normalized
 	var candidate: Dictionary = {"format": "rw.world/0.1", "entities": normalized.snapshot, "terrain": tiles, "actor": actor}
-	if _snapshot.get("format") == "rw.world/0.2" or water_override != null:
-		candidate.format = "rw.world/0.2"
+	if WorldCodec.has_environment(_snapshot) or water_override != null or actor.has("body_foot"):
+		candidate.format = "rw.world/0.3" if actor.has("body_foot") else "rw.world/0.2"
 		candidate["water"] = _water_entries(water)
 	var valid: Dictionary = validate_checkpoint(JSON.stringify(candidate))
 	if not valid.ok:
@@ -203,6 +203,8 @@ func place(id: String, cell: Vector2i) -> Dictionary:
 func step_actor(delta: Vector2i) -> Dictionary:
 	if _snapshot.is_empty() or absi(delta.x) + absi(delta.y) != 1:
 		return Codec.reject("invalid_grid_step")
+	if _snapshot.actor.has("body_foot"):
+		return move_actor_body(actor_body_foot() + delta * WorldCodec.BODY_UNITS)
 	var cell: Vector2i = actor_cell() + delta
 	if not WorldCodec.in_bounds(cell) or not WorldCodec.in_bounds(cell + Vector2i.UP):
 		return Codec.reject("coordinate_range")
@@ -292,7 +294,7 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 				if not changed.has(donor_cell):
 					changed.append(donor_cell)
 			"take_environment_water", "release_environment_water":
-				if _snapshot.get("format") != "rw.world/0.2": return Codec.reject("environment_not_enabled")
+				if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
 				var target: Vector2i
 				if command.op == "take_environment_water":
 					if not Codec._shape(command,["op","cell","amount"]) or not command.cell is Vector2i: return Codec.reject("environment_command_fields")
@@ -308,7 +310,7 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 				return Codec.reject("forbidden_rule_command")
 		if not result.ok:
 			return result
-	return _commit(stage, _terrain, _snapshot.actor.duplicate(true), changed, water if _snapshot.format == "rw.world/0.2" else null)
+	return _commit(stage, _terrain, _snapshot.actor.duplicate(true), changed, water if WorldCodec.has_environment(_snapshot) else null)
 
 func _prepare_rule_revision(versions: Dictionary, snapshot: Dictionary) -> Dictionary:
 	## 可信宿主内部接口：规则运行时已完成引用/权限检查；材料能力保持原目录。
@@ -349,7 +351,7 @@ func total_water_units() -> int:
 
 func enable_environment() -> Dictionary:
 	if _snapshot.is_empty(): return Codec.reject("world_not_loaded")
-	if _snapshot.format == "rw.world/0.2": return {"ok":true,"error":""}
+	if WorldCodec.has_environment(_snapshot): return {"ok":true,"error":""}
 	return _commit(_staged_store(),_terrain,_snapshot.actor.duplicate(true),[],{})
 
 func _exchange_water(stage, water: Dictionary, id: String, cell: Vector2i, amount: Variant, collect: bool) -> Dictionary:
@@ -373,7 +375,7 @@ func release_water(id: String, cell: Vector2i, amount: Variant) -> Dictionary:
 	return _manual_water(id,cell,amount,false)
 
 func _manual_water(id: String, cell: Vector2i, amount: Variant, collect: bool) -> Dictionary:
-	if _snapshot.get("format") != "rw.world/0.2": return Codec.reject("environment_not_enabled")
+	if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
 	var access: Dictionary = _accessible_instance(id)
 	if not access.ok: return access
 	access = _access(cell)
@@ -388,7 +390,7 @@ func _manual_water(id: String, cell: Vector2i, amount: Variant, collect: bool) -
 	return _commit(stage,_terrain,_snapshot.actor.duplicate(true),cells,water)
 
 func advance_water(operation_budget: Variant = 65536) -> Dictionary:
-	if _snapshot.get("format") != "rw.world/0.2": return Codec.reject("environment_not_enabled")
+	if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
 	var blockers: Dictionary = {}
 	for cell: Vector2i in occupied_cells(): blockers[cell] = true
 	var result: Dictionary = WaterFlow.step(_water,blockers,WorldCodec.MAX_WATER,operation_budget)
@@ -412,3 +414,45 @@ func has_light_at(cell: Vector2i, night: bool) -> bool:
 		var source := Vector2i(entity.location.cell[0],entity.location.cell[1])
 		if (source-cell).length_squared() <= 16 and line_clear(source,cell): return true
 	return false
+
+func actor_occupied_cells() -> Array:
+	return [] if _snapshot.is_empty() else WorldCodec.actor_cells(_snapshot.actor)
+
+func actor_body_foot() -> Vector2i:
+	if _snapshot.is_empty(): return Vector2i.ZERO
+	if _snapshot.actor.has("body_foot"):
+		return Vector2i(_snapshot.actor.body_foot[0], _snapshot.actor.body_foot[1])
+	return actor_cell() * WorldCodec.BODY_UNITS + Vector2i(WorldCodec.BODY_UNITS / 2, WorldCodec.BODY_UNITS)
+
+func enable_actor_body() -> Dictionary:
+	if _snapshot.is_empty(): return Codec.reject("world_not_loaded")
+	if _snapshot.actor.has("body_foot"): return {"ok":true,"error":""}
+	var actor: Dictionary = _snapshot.actor.duplicate(true)
+	var foot: Vector2i = actor_body_foot()
+	actor["body_foot"] = [foot.x, foot.y]
+	return _commit(_staged_store(), _terrain, actor, [], _water)
+
+func move_actor_body(foot: Vector2i) -> Dictionary:
+	if _snapshot.is_empty() or not _snapshot.actor.has("body_foot"): return Codec.reject("actor_body_not_enabled")
+	var previous: Vector2i = actor_body_foot()
+	var delta: Vector2i = foot - previous
+	if absi(delta.x) > WorldCodec.BODY_UNITS or absi(delta.y) > WorldCodec.BODY_UNITS: return Codec.reject("body_motion_too_large")
+	if foot == previous: return {"ok":true,"error":""}
+	var actor: Dictionary = _snapshot.actor.duplicate(true)
+	var old_cells: Array = actor_occupied_cells()
+	# 原生碰撞之外再做有界扫掠：外部命令不能只校验终点而穿过墙角。
+	var samples: int = maxi(1, ceili(float(maxi(absi(delta.x), absi(delta.y))) / 64.0))
+	for i in range(1, samples + 1):
+		var pos: Vector2i = previous + Vector2i(roundi(float(delta.x) * i / samples), roundi(float(delta.y) * i / samples))
+		actor.body_foot = [pos.x, pos.y]
+		for cell: Vector2i in WorldCodec.actor_cells(actor):
+			if not WorldCodec.in_bounds(cell): return Codec.reject("coordinate_range")
+			if not material_at(cell).is_empty(): return Codec.reject("actor_collision")
+			if not old_cells.has(cell) and water_at(cell) >= WorldCodec.DEEP_WATER: return Codec.reject("deep_water")
+	var anchor: Vector2i = WorldCodec.body_cell(foot)
+	actor.cell = [anchor.x, anchor.y]
+	actor.body_foot = [foot.x, foot.y]
+	return _commit(_staged_store(), _terrain, actor, [])
+
+func instance_at(cell: Vector2i) -> String:
+	return str(_occupants.get(cell, ""))

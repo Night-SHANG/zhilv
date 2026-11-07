@@ -17,17 +17,26 @@ def cell(value, where: str) -> tuple[int, int]:
 def validate_world(text: str, catalog: dict) -> dict:
     """只在完整验证后返回独立解码结果；未知版本不会静默降级。"""
     d = parse_bounded(text)
-    require(type(d) is dict and d.get('format') in ('rw.world/0.1', 'rw.world/0.2'), '不支持的世界版本')
+    require(type(d) is dict and d.get('format') in ('rw.world/0.1', 'rw.world/0.2', 'rw.world/0.3'), '不支持的世界版本')
     fields = {'format', 'entities', 'terrain', 'actor'}
-    if d['format'] == 'rw.world/0.2':
+    if d['format'] in ('rw.world/0.2', 'rw.world/0.3'):
         fields.add('water')
     exact(d, fields, 'world')
     entities = validate(json.dumps(d['entities'], ensure_ascii=False), catalog)
-    exact(d['actor'], {'id', 'cell'}, 'actor')
+    exact(d['actor'], {'id', 'cell', 'body_foot'} if d['format']=='rw.world/0.3' else {'id', 'cell'}, 'actor')
     ident(d['actor']['id'], 'actor.id')
     foot = cell(d['actor']['cell'], 'actor.cell')
     head = (foot[0], foot[1] - 1)
     require(head[1] >= -COORD_LIMIT, '角色头部越界')
+    body_cells={foot,head}
+    if d['format']=='rw.world/0.3':
+        point=d['actor']['body_foot']
+        require(type(point) is list and len(point)==2, '身体脚点必须为二维整数')
+        for n in point: integer(n,-COORD_LIMIT*1024,(COORD_LIMIT+1)*1024,'body_foot')
+        x,y=point
+        require(foot==(x//1024,(y-1)//1024),'身体脚点与交互格不一致')
+        body_cells={(cx,cy) for cy in range((y-1792)//1024,(y-1)//1024+1) for cx in range((x-320)//1024,(x+319)//1024+1)}
+        require(all(-COORD_LIMIT<=cx<=COORD_LIMIT and -COORD_LIMIT<=cy<=COORD_LIMIT for cx,cy in body_cells),'身体越界')
     require(type(d['terrain']) is list and len(d['terrain']) <= MAX_TERRAIN, '地形类型/预算错误')
     occupied = set()
     for tile in d['terrain']:
@@ -46,8 +55,8 @@ def validate_world(text: str, catalog: dict) -> dict:
             occupied.add(pos)
         else:
             require(loc['owner'] == d['actor']['id'], '单角色世界中存在其他库存归属')
-    require(foot not in occupied and head not in occupied, '角色与实体/地形重叠')
-    if d['format'] == 'rw.world/0.2':
+    require(body_cells.isdisjoint(occupied), '角色与实体/地形重叠')
+    if d['format'] in ('rw.world/0.2', 'rw.world/0.3'):
         require(type(d['water']) is list and len(d['water']) <= 4096, '水层类型/预算错误')
         seen_water = set()
         for entry in d['water']:
