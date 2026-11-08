@@ -1,0 +1,137 @@
+"""真实 Godot 进程的验证门禁；日志解析测试不是引擎行为测试。"""
+from __future__ import annotations
+import json
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+from check_material_evidence import validate_material_output, validate_ascent_output
+from check_composition_evidence import validate_composition_evidence
+from check_snapshot import validate, ValidationError
+from check_world import validate_world
+from check_rule_evidence import validate_fixture_result
+from check_authoring_evidence import validate_authoring_result
+from check_environment_evidence import validate_expedition_result
+from check_fresh_evidence import validate_fresh_expedition
+from check_extended_evidence import validate_extended_expedition
+from check_play_evidence import validate_native_play, validate_live_expedition, validate_ui_expedition
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def parse_result(exit_code: int, output: str, marker: str) -> dict:
+    matches = re.findall(r'^' + re.escape(marker) + r': (\d+) passed; (\d+) failed\s*$', output, re.M)
+    good = len(matches) == 1
+    passed, failed = map(int, matches[0]) if good else (0, 0)
+    errors = any(x in output for x in ('SCRIPT ERROR:', 'Parse Error:', 'ERROR:'))
+    ok = good and passed > 0 and failed == 0 and exit_code == 0 and not errors
+    return {'status': 'PASS' if ok else 'FAIL', 'passed': passed, 'failed': failed,
+            'exit_code': exit_code, 'completion_markers': len(matches),
+            'diagnostics': [line for line in output.splitlines() if any(tag in line for tag in ('FAIL:', 'SCRIPT ERROR:', 'Parse Error:', 'ERROR:', ' at:'))][:12]}
+
+
+def native_check(executable: str | None, reports: pathlib.Path) -> dict:
+    path = executable or os.environ.get('GODOT_BIN') or shutil.which('godot') or shutil.which('godot4')
+    if not path:
+        return {'status': 'BLOCKED', 'reason': 'Godot executable unavailable; no native tests ran'}
+    env = os.environ.copy()
+    env['GODOT_SILENCE_ROOT_WARNING'] = '1'
+    env['RULEWEAVER_FIXTURE_ROOT'] = str(ROOT / 'fixtures')
+    evidence = reports.resolve() / 'native_checkpoint.json'
+    env['RULEWEAVER_NATIVE_CHECKPOINT'] = str(evidence)
+    world_evidence = reports.resolve() / 'native_world.json'
+    env['RULEWEAVER_NATIVE_WORLD'] = str(world_evidence)
+    rules_evidence = reports.resolve() / 'native_rules.json'
+    env['RULEWEAVER_NATIVE_RULES'] = str(rules_evidence)
+    authoring_evidence = reports.resolve() / 'native_authoring.json'
+    env['RULEWEAVER_NATIVE_AUTHORING'] = str(authoring_evidence)
+    expedition_evidence = reports.resolve() / 'native_expedition.json'
+    env['RULEWEAVER_NATIVE_EXPEDITION'] = str(expedition_evidence)
+    actor_evidence = reports.resolve() / 'native_actor.json'
+    play_evidence = reports.resolve() / 'native_play.json'
+    live_evidence = reports.resolve() / 'native_live_expedition.json'
+    env['RULEWEAVER_NATIVE_ACTOR'] = str(actor_evidence)
+    env['RULEWEAVER_NATIVE_PLAY'] = str(play_evidence)
+    env['RULEWEAVER_NATIVE_LIVE_EXPEDITION'] = str(live_evidence)
+    ui_evidence = reports.resolve() / 'native_ui_play.json'
+    env['RULEWEAVER_NATIVE_UI_PLAY'] = str(ui_evidence)
+    fresh_evidence = reports.resolve() / 'native_fresh_workspace.json'
+    env['RULEWEAVER_NATIVE_FRESH_PLAY'] = str(fresh_evidence)
+    extended_evidence = reports.resolve() / 'native_extended_workspace.json'
+    env['RULEWEAVER_NATIVE_EXTENDED'] = str(extended_evidence)
+    composition_evidence = reports.resolve() / "native_composition.json"
+    env["RULEWEAVER_NATIVE_COMPOSITION"] = str(composition_evidence)
+    material_evidence = reports.resolve() / 'native_material.json'
+    ascent_evidence = reports.resolve() / 'native_ascent.json'
+    stone_evidence = reports.resolve() / 'native_ascent_stone.json'
+    env['RULEWEAVER_NATIVE_MATERIAL'] = str(material_evidence)
+    env['RULEWEAVER_NATIVE_ASCENT'] = str(ascent_evidence)
+    env['RULEWEAVER_NATIVE_ASCENT_STONE'] = str(stone_evidence)
+    expected = json.loads((ROOT / 'toolchain.lock.json').read_text(encoding='utf-8'))['godot_version']
+    try:
+        version = subprocess.run([path, '--version'], capture_output=True, text=True,
+                                 encoding='utf-8', errors='replace', timeout=15)
+        text = version.stdout.strip()
+        if version.returncode or not text.startswith(expected + '.stable.'):
+            return {'status': 'BLOCKED', 'reason': 'Godot version differs from pinned baseline', 'engine': text}
+        reports.mkdir(parents=True, exist_ok=True)
+        for file in (material_evidence, ascent_evidence, stone_evidence): file.unlink(missing_ok=True)
+        composition_evidence.unlink(missing_ok=True)
+        evidence.unlink(missing_ok=True)  # 仅删除本次输出，禁止旧证据蒙混过关。
+        world_evidence.unlink(missing_ok=True)
+        rules_evidence.unlink(missing_ok=True)
+        authoring_evidence.unlink(missing_ok=True)
+        expedition_evidence.unlink(missing_ok=True)
+        for file in (actor_evidence, play_evidence, live_evidence, ui_evidence, fresh_evidence, extended_evidence):
+            file.unlink(missing_ok=True)
+        suites = []
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT'), ('authoring', 'AUTHORING_TEST_RESULT'), ('draft', 'DRAFT_TEST_RESULT'), ('water', 'WATER_TEST_RESULT'), ('environment', 'ENVIRONMENT_TEST_RESULT'), ('expedition', 'EXPEDITION_TEST_RESULT'), ('environment_edges', 'ENVIRONMENT_EDGES_TEST_RESULT'), ('actor_body', 'ACTOR_BODY_TEST_RESULT'), ('platform', 'PLATFORM_TEST_RESULT'), ('play_session', 'PLAY_SESSION_TEST_RESULT'), ('live_expedition', 'LIVE_EXPEDITION_TEST_RESULT'), ('interface', 'INTERFACE_TEST_RESULT'), ('graph_input', 'GRAPH_INPUT_TEST_RESULT'), ('ui_input', 'UI_INPUT_TEST_RESULT'), ('crafting', 'CRAFTING_TEST_RESULT'), ('workspace', 'WORKSPACE_TEST_RESULT'), ('crafting_ui', 'CRAFTING_UI_TEST_RESULT'), ('inventory_edges', 'INVENTORY_EDGES_TEST_RESULT'), ('diagnostics', 'DIAGNOSTICS_TEST_RESULT'), ('progression', 'PROGRESSION_TEST_RESULT'), ('guidance_ui', 'GUIDANCE_UI_TEST_RESULT'), ('extended_route', 'EXTENDED_ROUTE_TEST_RESULT'), ('word_composition', 'WORD_COMPOSITION_TEST_RESULT'), ('word_ui', 'WORD_UI_TEST_RESULT'), ('word_layout', 'WORD_LAYOUT_TEST_RESULT'), ('material_form','MATERIAL_FORM_TEST_RESULT'), ('material_rules','MATERIAL_RULES_TEST_RESULT'), ('material_compat','MATERIAL_COMPAT_TEST_RESULT'), ('form_ui','FORM_UI_TEST_RESULT'), ('ascent_route','ASCENT_ROUTE_TEST_RESULT'), ('ascent_stone','ASCENT_STONE_TEST_RESULT')):
+            cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
+                   '--script', 'res://tests/test_' + name + '.gd']
+            if name in ('platform', 'play_session', 'live_expedition', 'interface', 'graph_input', 'ui_input', 'crafting_ui', 'inventory_edges', 'guidance_ui', 'extended_route', 'word_ui', 'word_layout', 'form_ui', 'ascent_route', 'ascent_stone'):
+                cmd[2:2] = ['--fixed-fps', '60']
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
+                                  errors='replace', timeout=90, env=env)
+            output = proc.stdout + '\n' + proc.stderr
+            (reports / ('godot_' + name + '.log')).write_text(output, encoding='utf-8')
+            result = parse_result(proc.returncode, output, marker)
+            suites.append({'suite': name, 'command': cmd, **result})
+        status = 'PASS' if all(x['status'] == 'PASS' for x in suites) else 'FAIL'
+        cross = 'NOT_RUN'
+        if status == 'PASS':
+            catalog = json.loads((ROOT / 'fixtures/catalog.json').read_text(encoding='utf-8'))
+            validate(evidence.read_text(encoding='utf-8'), catalog)
+            validate_world(world_evidence.read_text(encoding='utf-8'), catalog)
+            rule_catalog = json.loads((ROOT/'fixtures/rules_catalog.json').read_text(encoding='utf-8'))
+            rule_world = json.loads((ROOT/'fixtures/rules_world.json').read_text(encoding='utf-8'))
+            rule_pack = json.loads((ROOT/'fixtures/rules_pack.json').read_text(encoding='utf-8'))
+            validate_fixture_result(rules_evidence.read_text(encoding='utf-8'), rule_catalog, rule_world, rule_pack)
+            authoring_expected = json.loads((ROOT/'fixtures/authoring_expected.json').read_text(encoding='utf-8'))
+            validate_authoring_result(authoring_evidence.read_text(encoding='utf-8'), rule_catalog, authoring_expected)
+            scenario = json.loads((ROOT/'godot/content/wet_ruins.json').read_text(encoding='utf-8'))
+            contract = json.loads((ROOT/'fixtures/environment_contract.json').read_text(encoding='utf-8'))
+            validate_expedition_result(expedition_evidence.read_text(encoding='utf-8'), scenario, contract)
+            validate_world(actor_evidence.read_text(encoding='utf-8'), catalog)
+            validate_native_play(play_evidence.read_text(encoding='utf-8'), catalog)
+            validate_live_expedition(live_evidence.read_text(encoding='utf-8'), scenario, contract)
+            ui_scenario = json.loads((ROOT/'godot/content/first_expedition.json').read_text(encoding='utf-8'))
+            ui_contract = json.loads((ROOT/'fixtures/ui_contract.json').read_text(encoding='utf-8'))
+            validate_ui_expedition(ui_evidence.read_text(encoding='utf-8'), ui_scenario, ui_contract)
+            fresh_scenario = json.loads((ROOT/'godot/content/fresh_expedition.json').read_text(encoding='utf-8'))
+            fresh_contract = json.loads((ROOT/'fixtures/fresh_contract.json').read_text(encoding='utf-8'))
+            validate_fresh_expedition(fresh_evidence.read_text(encoding='utf-8'), fresh_scenario, fresh_contract)
+            validate_extended_expedition(extended_evidence.read_text(encoding='utf-8'), fresh_scenario, fresh_contract)
+            composition_contract = json.loads((ROOT/'fixtures/composition_expected.json').read_text(encoding='utf-8'))
+            validate_composition_evidence(composition_evidence.read_text(encoding='utf-8'), composition_contract)
+            validate_material_output(material_evidence.read_text(encoding='utf-8'))
+            validate_ascent_output(ascent_evidence.read_text(encoding='utf-8'),fresh_scenario,fresh_contract)
+            validate_ascent_output(stone_evidence.read_text(encoding='utf-8'),fresh_scenario,fresh_contract,stone=True)
+            cross = 'PASS'
+        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross, 'native_authoring_python_validation': cross, 'native_expedition_python_validation': cross, 'native_actor_python_validation': cross, 'native_play_python_validation': cross, 'native_live_expedition_python_validation': cross, 'native_ui_python_validation': cross, 'native_fresh_workspace_validation': cross, 'native_extended_workspace_validation': cross, 'native_composition_validation': cross, 'native_material_validation': cross, 'native_ascent_validation': cross, 'native_ascent_stone_validation': cross,
+                'scope': 'native world, editable GraphEdit, visible app controls, real-input expedition and save; headless tests do not prove visual quality, GPU compatibility or hand-feel'}
+    except FileNotFoundError as exc:
+        # 启动前缺引擎，不是原生断言通过；启动后缺输出则判失败。
+        return {'status': 'FAIL' if 'suites' in locals() else 'BLOCKED', 'reason': str(exc)}
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return {'status': 'FAIL', 'reason': str(exc)}

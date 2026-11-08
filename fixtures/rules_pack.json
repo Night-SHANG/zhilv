@@ -1,0 +1,154 @@
+{
+  "format": "rw.rules/0.1",
+  "modules": [
+    {
+      "id": "user:night_light",
+      "version": 1,
+      "parameters": {},
+      "nodes": [
+        {
+          "id": "night",
+          "op": "is_night",
+          "inputs": {},
+          "config": {}
+        },
+        {
+          "id": "yes",
+          "op": "bool",
+          "inputs": {},
+          "config": {
+            "value": true
+          }
+        },
+        {
+          "id": "lamp",
+          "op": "set_light",
+          "inputs": {
+            "when": "yes",
+            "value": "night"
+          },
+          "config": {}
+        }
+      ],
+      "effects": [
+        "lamp"
+      ]
+    },
+    {
+      "id": "user:transfer",
+      "version": 1,
+      "parameters": {
+        "amount": {
+          "type": "int",
+          "default": 25
+        }
+      },
+      "nodes": [
+        {
+          "id": "amount",
+          "op": "param",
+          "inputs": {},
+          "config": {
+            "name": "amount"
+          }
+        },
+        {
+          "id": "source",
+          "op": "neighbor",
+          "inputs": {},
+          "config": {
+            "material": "user:reservoir"
+          }
+        },
+        {
+          "id": "found",
+          "op": "exists",
+          "inputs": {
+            "value": "source"
+          },
+          "config": {}
+        },
+        {
+          "id": "take",
+          "op": "take_water",
+          "inputs": {
+            "when": "found",
+            "source": "source",
+            "amount": "amount"
+          },
+          "config": {}
+        }
+      ],
+      "effects": [
+        "take"
+      ]
+    },
+    {
+      "id": "user:absorb",
+      "version": 1,
+      "parameters": {},
+      "nodes": [
+        {
+          "id": "yes",
+          "op": "bool",
+          "inputs": {},
+          "config": {
+            "value": true
+          }
+        },
+        {
+          "id": "amount",
+          "op": "int",
+          "inputs": {},
+          "config": {
+            "value": 100
+          }
+        },
+        {
+          "id": "call",
+          "op": "call",
+          "inputs": {
+            "when": "yes",
+            "amount": "amount"
+          },
+          "config": {
+            "id": "user:transfer",
+            "version": 1
+          }
+        }
+      ],
+      "effects": [
+        "call"
+      ]
+    },
+    {
+      "id": "user:drift",
+      "version": 1,
+      "parameters": {},
+      "nodes": [
+        {
+          "id": "yes",
+          "op": "bool",
+          "inputs": {},
+          "config": {
+            "value": true
+          }
+        },
+        {
+          "id": "move",
+          "op": "move",
+          "inputs": {
+            "when": "yes"
+          },
+          "config": {
+            "dx": 0,
+            "dy": 1
+          }
+        }
+      ],
+      "effects": [
+        "move"
+      ]
+    }
+  ]
+}

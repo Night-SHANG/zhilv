@@ -1,0 +1,11 @@
+{
+  "format": "rw.catalog/0.1",
+  "materials": {
+    "core:stone": {"stackable": true},
+    "user:reservoir": {"stackable": false, "state": "reservoir/0.1"}
+  },
+  "rules": {
+    "user:absorb": [1],
+    "user:night_light": [1, 2]
+  }
+}

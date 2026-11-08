@@ -1,0 +1,426 @@
+{
+  "format": "rw.simulation/0.1",
+  "tick": 6,
+  "world": {
+    "format": "rw.world/0.1",
+    "entities": {
+      "format": "rw.instances/0.1",
+      "world_id": "world:rules",
+      "stacks": {
+        "core:stone": 8
+      },
+      "instances": [
+        {
+          "id": "creation:001",
+          "material_id": "user:reservoir",
+          "rules": [
+            {
+              "id": "user:my_lamp",
+              "version": 1
+            }
+          ],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 1000,
+            "light_on": true
+          },
+          "location": {
+            "kind": "world",
+            "cell": [
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "id": "creation:002",
+          "material_id": "user:reservoir",
+          "rules": [],
+          "state": {
+            "water_units": 500,
+            "capacity_units": 1000,
+            "light_on": false
+          },
+          "location": {
+            "kind": "world",
+            "cell": [
+              4,
+              2
+            ]
+          }
+        },
+        {
+          "id": "creation:003",
+          "material_id": "user:crystal",
+          "rules": [
+            {
+              "id": "user:night_light",
+              "version": 1
+            }
+          ],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 1000,
+            "light_on": true
+          },
+          "location": {
+            "kind": "world",
+            "cell": [
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "id": "creation:004",
+          "material_id": "user:reservoir",
+          "rules": [
+            {
+              "id": "user:composed",
+              "version": 1
+            }
+          ],
+          "state": {
+            "water_units": 0,
+            "capacity_units": 1000,
+            "light_on": true
+          },
+          "location": {
+            "kind": "world",
+            "cell": [
+              1,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    "terrain": [
+      {
+        "cell": [
+          1,
+          3
+        ],
+        "material_id": "core:stone"
+      },
+      {
+        "cell": [
+          2,
+          3
+        ],
+        "material_id": "core:stone"
+      }
+    ],
+    "actor": {
+      "id": "player:local",
+      "cell": [
+        0,
+        2
+      ]
+    }
+  },
+  "rules": {
+    "format": "rw.rules/0.1",
+    "modules": [
+      {
+        "id": "user:night_light",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "night",
+            "op": "is_night",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "yes",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "lamp",
+            "op": "set_light",
+            "inputs": {
+              "when": "yes",
+              "value": "night"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "lamp"
+        ]
+      },
+      {
+        "id": "user:transfer",
+        "version": 1,
+        "parameters": {
+          "amount": {
+            "type": "int",
+            "default": 25
+          }
+        },
+        "nodes": [
+          {
+            "id": "amount",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "amount"
+            }
+          },
+          {
+            "id": "source",
+            "op": "neighbor",
+            "inputs": {},
+            "config": {
+              "material": "user:reservoir"
+            }
+          },
+          {
+            "id": "found",
+            "op": "exists",
+            "inputs": {
+              "value": "source"
+            },
+            "config": {}
+          },
+          {
+            "id": "take",
+            "op": "take_water",
+            "inputs": {
+              "when": "found",
+              "source": "source",
+              "amount": "amount"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "take"
+        ]
+      },
+      {
+        "id": "user:absorb",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "yes",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "amount",
+            "op": "int",
+            "inputs": {},
+            "config": {
+              "value": 100
+            }
+          },
+          {
+            "id": "call",
+            "op": "call",
+            "inputs": {
+              "when": "yes",
+              "amount": "amount"
+            },
+            "config": {
+              "id": "user:transfer",
+              "version": 1
+            }
+          }
+        ],
+        "effects": [
+          "call"
+        ]
+      },
+      {
+        "id": "user:drift",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "yes",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "move",
+            "op": "move",
+            "inputs": {
+              "when": "yes"
+            },
+            "config": {
+              "dx": 0,
+              "dy": 1
+            }
+          }
+        ],
+        "effects": [
+          "move"
+        ]
+      },
+      {
+        "id": "user:my_lamp",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "night",
+            "op": "is_night",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "always",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "light",
+            "op": "set_light",
+            "inputs": {
+              "when": "always",
+              "value": "night"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "light"
+        ]
+      },
+      {
+        "id": "user:my_lamp",
+        "version": 2,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "night",
+            "op": "is_night",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "always",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "light",
+            "op": "set_light",
+            "inputs": {
+              "when": "always",
+              "value": "inverse"
+            },
+            "config": {}
+          },
+          {
+            "id": "inverse",
+            "op": "not",
+            "inputs": {
+              "value": "night"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "light"
+        ]
+      },
+      {
+        "id": "user:brightness",
+        "version": 1,
+        "parameters": {
+          "enabled": {
+            "type": "bool",
+            "default": true
+          }
+        },
+        "nodes": [
+          {
+            "id": "enabled",
+            "op": "param",
+            "inputs": {},
+            "config": {
+              "name": "enabled"
+            }
+          },
+          {
+            "id": "yes",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "light",
+            "op": "set_light",
+            "inputs": {
+              "when": "yes",
+              "value": "enabled"
+            },
+            "config": {}
+          }
+        ],
+        "effects": [
+          "light"
+        ]
+      },
+      {
+        "id": "user:composed",
+        "version": 1,
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "night",
+            "op": "is_night",
+            "inputs": {},
+            "config": {}
+          },
+          {
+            "id": "yes",
+            "op": "bool",
+            "inputs": {},
+            "config": {
+              "value": true
+            }
+          },
+          {
+            "id": "call",
+            "op": "call",
+            "inputs": {
+              "when": "yes",
+              "enabled": "night"
+            },
+            "config": {
+              "id": "user:brightness",
+              "version": 1
+            }
+          }
+        ],
+        "effects": [
+          "call"
+        ]
+      }
+    ]
+  }
+}
