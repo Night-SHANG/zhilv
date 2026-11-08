@@ -13,7 +13,7 @@ def validate_extended_expedition(text:str,scenario:dict,contract:dict)->dict:
     rules=copy.deepcopy(scenario['rules']);rules['modules'].append(copy.deepcopy(contract['pump']))
     play=validate_play_checkpoint(json.dumps(data['play'],ensure_ascii=False),scenario['catalog'],scenario['definition'],rules)
     exp=play['expedition'];sim=exp['simulation'];world=sim['world'];original=scenario['world']
-    require(exp['completed']==[g['id'] for g in scenario['definition']['objectives']],'后续目标未全部完成')
+    require(exp['completed']==['goal:ruins','goal:irrigate','goal:lower_archive','goal:lower_supply'],'后续目标未全部完成')
     require(world['entities']['world_id']==original['entities']['world_id'],'更换了世界')
     require(world['actor']['id']==original['actor']['id'] and world['actor']['cell']==[6,2],'未实际到达下层')
     require(sim['clock']=={**scenario['clock'],'paused':True},'收尾应暂停且保留昼夜')

@@ -31,7 +31,7 @@ func _continue_after_first_section(vessel:String,lamp:String)->void:
 	check(app.expedition.status().completed==["goal:ruins","goal:irrigate","goal:lower_archive","goal:lower_supply"],"all_four_world_result_objectives_complete")
 	check(app.world.total_water_units()==6000,"followup_mints_or_discards_no_water")
 	check(app.world.stack_count("core:stone")==4,"only_newly_dug_four_floor_blocks_added")
-	check(app.guidance_state().stage=="freeplay","completion_keeps_sandbox_open")
+	check(app.guidance_state().stage=="ascent","four_goals_lead_to_ascent_without_locking_sandbox")
 	app.play.set_paused(true)
 	var out:String=OS.get_environment("RULEWEAVER_NATIVE_EXTENDED")
 	if not out.is_empty():

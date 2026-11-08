@@ -84,12 +84,16 @@ func _draw() -> void:
 		var base:=Color("455663").lightened(variation)
 		if cell.y>=3: base=Color("34424c").lightened(variation)
 		if cell.x<1: base=base.lerp(Color("78674e"),0.3)
+		var condensed:bool=world.material_water_cost(tile.material_id)>0
+		if condensed:base=Color("438aab")
 		_rect(p,Vector2(16,16),Color("1c2933"))
 		_rect(p+Vector2(0.5,0.5),Vector2(15,14),base)
 		draw_line(p+Vector2(1,1),p+Vector2(15,1),base.lightened(0.16),1)
 		draw_line(p+Vector2(3,9),p+Vector2(9,9),base.darkened(0.13),0.8)
 		if posmod(cell.x+cell.y*3,4)==0: draw_line(p+Vector2(11,2),p+Vector2(10,6),base.darkened(0.3),1)
-		if world.material_at(cell+Vector2i.UP).is_empty() and cell.y>=1:
+		if condensed:
+			draw_polyline(PackedVector2Array([p+Vector2(8,2),p+Vector2(13,8),p+Vector2(8,14),p+Vector2(3,8),p+Vector2(8,2)]),Color("b8e7ec"),0.8,true)
+		if not condensed and world.material_at(cell+Vector2i.UP).is_empty() and cell.y>=1:
 			_rect(p,Vector2(16,1.5),Color("6d806a"))
 			for xx in [3,9,13]: draw_line(p+Vector2(xx,0),p+Vector2(xx-1,-2),Color("75916b"),0.7)
 	# 低成本可重复的藤条，只装饰洞顶。

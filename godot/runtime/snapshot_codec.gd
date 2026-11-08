@@ -103,6 +103,13 @@ static func _lexical_error(text: String) -> String:
 		i += 1
 	return ""
 
+static func bound_water_cost(material: Variant) -> int:
+	## 受信材料定义的不可变含水量；0=普通材料，-1=非法声明。
+	if not material is Dictionary: return -1
+	if not material.has("bound_water_units"): return 0
+	if material.get("stackable") != true or not _integer(material.bound_water_units,1,1000): return -1
+	return int(material.bound_water_units)
+
 static func decode(text: String, catalog: Dictionary) -> Dictionary:
 	var lexical: String = _lexical_error(text)
 	if not lexical.is_empty():
@@ -117,6 +124,8 @@ static func _decode_parsed(d: Variant, catalog: Dictionary) -> Dictionary:
 	# 不把Godot解析后的float重新写成JSON再校验，保持整数传输约束。
 	if catalog.get("format") != "rw.catalog/0.1" or not catalog.get("materials") is Dictionary or not catalog.get("rules") is Dictionary:
 		return reject("invalid_catalog")
+	for material in catalog.materials.values():
+		if bound_water_cost(material) < 0: return reject("invalid_bound_water_material")
 	if not _shape(d, ["format", "world_id", "stacks", "instances"]):
 		return reject("checkpoint_fields")
 	if d.format != "rw.instances/0.1":

@@ -77,6 +77,11 @@ def validate(text: str, catalog: dict) -> dict:
     require(type(catalog) is dict and catalog.get('format') == 'rw.catalog/0.1', '目录版本不支持')
     materials, rules = catalog.get('materials'), catalog.get('rules')
     require(type(materials) is dict and type(rules) is dict, '目录结构错误')
+    for material in materials.values():
+        require(type(material) is dict, '材料定义须为对象')
+        if 'bound_water_units' in material:
+            require(material.get('stackable') is True, '只有地形材料可以封水')
+            integer(material['bound_water_units'], 1, 1000, 'bound_water_units')
     d = parse_bounded(text)
     exact(d, {'format', 'world_id', 'stacks', 'instances'}, 'checkpoint')
     require(d['format'] == 'rw.instances/0.1', '存档版本不支持')

@@ -5,7 +5,7 @@ const MAX_BYTES: int = 262144
 const MAX_MODULES: int = 64
 const MAX_NODES: int = 64
 const MAX_DEPTH: int = 8
-const EFFECTS: Array = ["set_light", "move", "take_water", "take_environment_water", "release_environment_water", "call"]
+const EFFECTS: Array = ["set_light", "move", "take_water", "take_environment_water", "release_environment_water", "form_material", "recover_material", "call"]
 
 static func key(id: String, version: int) -> String:
 	return id + "@" + str(version)
@@ -175,6 +175,18 @@ static func signature(n: Dictionary, m: Dictionary, modules: Dictionary, catalog
 			if not Codec._shape(c, ["material"]) or not c.material is String or (c.material != "" and not catalog.materials.has(c.material)):
 				return Codec.reject("unknown_neighbor_material")
 			output = "ref"
+		"cell_empty", "terrain_is", "form_material", "recover_material":
+			var fields: Array = ["dx","dy"]
+			if n.op != "cell_empty": fields.append("material")
+			if not Codec._shape(c,fields) or not Codec._integer(c.dx,-1,1) or not Codec._integer(c.dy,-1,1) or absi(int(c.dx))+absi(int(c.dy))!=1: return Codec.reject("invalid_material_direction")
+			c.dx=int(c.dx); c.dy=int(c.dy)
+			if n.op != "cell_empty":
+				if not Codec.identifier(c.material) or not catalog.materials.has(c.material): return Codec.reject("unknown_terrain_material")
+				var material: Variant = catalog.materials[c.material]
+				if not material is Dictionary or material.get("stackable")!=true: return Codec.reject("invalid_terrain_material")
+				if n.op in ["form_material","recover_material"] and Codec.bound_water_cost(material)<=0: return Codec.reject("material_not_formable")
+			output="bool" if n.op in ["cell_empty","terrain_is"] else "effect"
+			if output=="effect": inputs={"when":"bool"}
 		"move", "release_environment_water":
 			if not Codec._shape(c, ["dx", "dy"]) or not Codec._integer(c.dx, -1, 1) or not Codec._integer(c.dy, -1, 1) or absi(int(c.dx)) + absi(int(c.dy)) != 1:
 				return Codec.reject("invalid_move_step")

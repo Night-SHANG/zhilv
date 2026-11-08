@@ -34,7 +34,7 @@ func add(op: String, config: Dictionary={}) -> Dictionary:
 	while not node(id).is_empty(): _counter+=1; id="node_"+str(_counter)
 	var result: Dictionary=draft.upsert_node({"id":id,"op":op,"config":config.duplicate(true),"inputs":{}})
 	if result.ok:
-		if op in ["set_light","move","take_water","take_environment_water","release_environment_water","call"]:
+		if op in ["set_light","move","take_water","take_environment_water","release_environment_water","form_material","recover_material","call"]:
 			var effects: Array=snapshot().effects; effects.append(id)
 			result=draft.set_effects(effects)
 		if not result.ok: draft.restore(before)
@@ -85,6 +85,21 @@ func preset(kind: String, rate: int=100) -> Dictionary:
 			nodes=[_n("always","bool",{},{"value":true}),_n("dark","is_ambient_dark"),_n("light","set_light",{"when":"always","value":"dark"})]; effects=["light"]
 		"release":
 			nodes=[_n("rate","int",{},{"value":rate}),_n("water","read_state",{},{"field":"water_units"}),_n("amount","min",{"a":"rate","b":"water"}),_n("zero","int",{},{"value":0}),_n("ready","lt",{"a":"zero","b":"amount"}),_n("release","release_environment_water",{"when":"ready","amount":"amount"},{"dx":1,"dy":0})]; effects=["release"]
+		"form", "recover":
+			# 只是现有通用节点的可拆改图；材料和方向可在高级编辑中另选。
+			nodes=[_n("water","read_state",{},{"field":"water_units"}),_n("cost","int",{},{"value":500})]
+			var amount_id: String="water"
+			if kind=="recover":
+				nodes.append(_n("capacity","read_state",{},{"field":"capacity_units"}))
+				nodes.append(_n("room","sub",{"a":"capacity","b":"water"}));amount_id="room"
+			nodes.append(_n("lacking","lt",{"a":amount_id,"b":"cost"}))
+			nodes.append(_n("enough","not",{"value":"lacking"}))
+			var config: Dictionary={"dx":0,"dy":-1}
+			if kind=="recover":config["material"]="core:water_crystal"
+			nodes.append(_n("target","cell_empty" if kind=="form" else "terrain_is",{},config))
+			nodes.append(_n("ready","and",{"a":"enough","b":"target"}))
+			nodes.append(_n(kind,"form_material" if kind=="form" else "recover_material",{"when":"ready"},{"dx":0,"dy":-1,"material":"core:water_crystal"}))
+			effects=[kind]
 		"blank": pass
 		_: return Codec.reject("unknown_preset")
 	var candidate: Dictionary={"id":before.id,"version":before.version,"parameters":{},"nodes":nodes,"effects":effects}

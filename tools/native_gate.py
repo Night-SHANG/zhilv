@@ -6,6 +6,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+from check_material_evidence import validate_material_output, validate_ascent_output
 from check_composition_evidence import validate_composition_evidence
 from check_snapshot import validate, ValidationError
 from check_world import validate_world
@@ -61,6 +62,12 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
     env['RULEWEAVER_NATIVE_EXTENDED'] = str(extended_evidence)
     composition_evidence = reports.resolve() / "native_composition.json"
     env["RULEWEAVER_NATIVE_COMPOSITION"] = str(composition_evidence)
+    material_evidence = reports.resolve() / 'native_material.json'
+    ascent_evidence = reports.resolve() / 'native_ascent.json'
+    stone_evidence = reports.resolve() / 'native_ascent_stone.json'
+    env['RULEWEAVER_NATIVE_MATERIAL'] = str(material_evidence)
+    env['RULEWEAVER_NATIVE_ASCENT'] = str(ascent_evidence)
+    env['RULEWEAVER_NATIVE_ASCENT_STONE'] = str(stone_evidence)
     expected = json.loads((ROOT / 'toolchain.lock.json').read_text(encoding='utf-8'))['godot_version']
     try:
         version = subprocess.run([path, '--version'], capture_output=True, text=True,
@@ -69,6 +76,7 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         if version.returncode or not text.startswith(expected + '.stable.'):
             return {'status': 'BLOCKED', 'reason': 'Godot version differs from pinned baseline', 'engine': text}
         reports.mkdir(parents=True, exist_ok=True)
+        for file in (material_evidence, ascent_evidence, stone_evidence): file.unlink(missing_ok=True)
         composition_evidence.unlink(missing_ok=True)
         evidence.unlink(missing_ok=True)  # 仅删除本次输出，禁止旧证据蒙混过关。
         world_evidence.unlink(missing_ok=True)
@@ -78,10 +86,10 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
         for file in (actor_evidence, play_evidence, live_evidence, ui_evidence, fresh_evidence, extended_evidence):
             file.unlink(missing_ok=True)
         suites = []
-        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT'), ('authoring', 'AUTHORING_TEST_RESULT'), ('draft', 'DRAFT_TEST_RESULT'), ('water', 'WATER_TEST_RESULT'), ('environment', 'ENVIRONMENT_TEST_RESULT'), ('expedition', 'EXPEDITION_TEST_RESULT'), ('environment_edges', 'ENVIRONMENT_EDGES_TEST_RESULT'), ('actor_body', 'ACTOR_BODY_TEST_RESULT'), ('platform', 'PLATFORM_TEST_RESULT'), ('play_session', 'PLAY_SESSION_TEST_RESULT'), ('live_expedition', 'LIVE_EXPEDITION_TEST_RESULT'), ('interface', 'INTERFACE_TEST_RESULT'), ('graph_input', 'GRAPH_INPUT_TEST_RESULT'), ('ui_input', 'UI_INPUT_TEST_RESULT'), ('crafting', 'CRAFTING_TEST_RESULT'), ('workspace', 'WORKSPACE_TEST_RESULT'), ('crafting_ui', 'CRAFTING_UI_TEST_RESULT'), ('inventory_edges', 'INVENTORY_EDGES_TEST_RESULT'), ('diagnostics', 'DIAGNOSTICS_TEST_RESULT'), ('progression', 'PROGRESSION_TEST_RESULT'), ('guidance_ui', 'GUIDANCE_UI_TEST_RESULT'), ('extended_route', 'EXTENDED_ROUTE_TEST_RESULT'), ('word_composition', 'WORD_COMPOSITION_TEST_RESULT'), ('word_ui', 'WORD_UI_TEST_RESULT'), ('word_layout', 'WORD_LAYOUT_TEST_RESULT')):
+        for name, marker in (('vendor', 'VENDOR_TEST_RESULT'), ('lifecycle', 'LIFECYCLE_TEST_RESULT'), ('world', 'WORLD_TEST_RESULT'), ('projection', 'PROJECTION_TEST_RESULT'), ('limits', 'LIMITS_TEST_RESULT'), ('rules', 'RULES_TEST_RESULT'), ('rule_edges', 'RULE_EDGES_TEST_RESULT'), ('authoring', 'AUTHORING_TEST_RESULT'), ('draft', 'DRAFT_TEST_RESULT'), ('water', 'WATER_TEST_RESULT'), ('environment', 'ENVIRONMENT_TEST_RESULT'), ('expedition', 'EXPEDITION_TEST_RESULT'), ('environment_edges', 'ENVIRONMENT_EDGES_TEST_RESULT'), ('actor_body', 'ACTOR_BODY_TEST_RESULT'), ('platform', 'PLATFORM_TEST_RESULT'), ('play_session', 'PLAY_SESSION_TEST_RESULT'), ('live_expedition', 'LIVE_EXPEDITION_TEST_RESULT'), ('interface', 'INTERFACE_TEST_RESULT'), ('graph_input', 'GRAPH_INPUT_TEST_RESULT'), ('ui_input', 'UI_INPUT_TEST_RESULT'), ('crafting', 'CRAFTING_TEST_RESULT'), ('workspace', 'WORKSPACE_TEST_RESULT'), ('crafting_ui', 'CRAFTING_UI_TEST_RESULT'), ('inventory_edges', 'INVENTORY_EDGES_TEST_RESULT'), ('diagnostics', 'DIAGNOSTICS_TEST_RESULT'), ('progression', 'PROGRESSION_TEST_RESULT'), ('guidance_ui', 'GUIDANCE_UI_TEST_RESULT'), ('extended_route', 'EXTENDED_ROUTE_TEST_RESULT'), ('word_composition', 'WORD_COMPOSITION_TEST_RESULT'), ('word_ui', 'WORD_UI_TEST_RESULT'), ('word_layout', 'WORD_LAYOUT_TEST_RESULT'), ('material_form','MATERIAL_FORM_TEST_RESULT'), ('material_rules','MATERIAL_RULES_TEST_RESULT'), ('material_compat','MATERIAL_COMPAT_TEST_RESULT'), ('form_ui','FORM_UI_TEST_RESULT'), ('ascent_route','ASCENT_ROUTE_TEST_RESULT'), ('ascent_stone','ASCENT_STONE_TEST_RESULT')):
             cmd = [path, '--headless', '--path', str(ROOT / 'godot'),
                    '--script', 'res://tests/test_' + name + '.gd']
-            if name in ('platform', 'play_session', 'live_expedition', 'interface', 'graph_input', 'ui_input', 'crafting_ui', 'inventory_edges', 'guidance_ui', 'extended_route', 'word_ui', 'word_layout'):
+            if name in ('platform', 'play_session', 'live_expedition', 'interface', 'graph_input', 'ui_input', 'crafting_ui', 'inventory_edges', 'guidance_ui', 'extended_route', 'word_ui', 'word_layout', 'form_ui', 'ascent_route', 'ascent_stone'):
                 cmd[2:2] = ['--fixed-fps', '60']
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
                                   errors='replace', timeout=90, env=env)
@@ -116,8 +124,11 @@ def native_check(executable: str | None, reports: pathlib.Path) -> dict:
             validate_extended_expedition(extended_evidence.read_text(encoding='utf-8'), fresh_scenario, fresh_contract)
             composition_contract = json.loads((ROOT/'fixtures/composition_expected.json').read_text(encoding='utf-8'))
             validate_composition_evidence(composition_evidence.read_text(encoding='utf-8'), composition_contract)
+            validate_material_output(material_evidence.read_text(encoding='utf-8'))
+            validate_ascent_output(ascent_evidence.read_text(encoding='utf-8'),fresh_scenario,fresh_contract)
+            validate_ascent_output(stone_evidence.read_text(encoding='utf-8'),fresh_scenario,fresh_contract,stone=True)
             cross = 'PASS'
-        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross, 'native_authoring_python_validation': cross, 'native_expedition_python_validation': cross, 'native_actor_python_validation': cross, 'native_play_python_validation': cross, 'native_live_expedition_python_validation': cross, 'native_ui_python_validation': cross, 'native_fresh_workspace_validation': cross, 'native_extended_workspace_validation': cross, 'native_composition_validation': cross,
+        return {'status': status, 'engine': text, 'suites': suites, 'native_snapshot_python_validation': cross, 'native_world_python_validation': cross, 'native_rule_fixture_python_validation': cross, 'native_authoring_python_validation': cross, 'native_expedition_python_validation': cross, 'native_actor_python_validation': cross, 'native_play_python_validation': cross, 'native_live_expedition_python_validation': cross, 'native_ui_python_validation': cross, 'native_fresh_workspace_validation': cross, 'native_extended_workspace_validation': cross, 'native_composition_validation': cross, 'native_material_validation': cross, 'native_ascent_validation': cross, 'native_ascent_stone_validation': cross,
                 'scope': 'native world, editable GraphEdit, visible app controls, real-input expedition and save; headless tests do not prove visual quality, GPU compatibility or hand-feel'}
     except FileNotFoundError as exc:
         # 启动前缺引擎，不是原生断言通过；启动后缺输出则判失败。

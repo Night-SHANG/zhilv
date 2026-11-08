@@ -13,7 +13,7 @@ const Compiler = preload("res://runtime/rule_compiler.gd")
 const Feedback=preload("res://presentation/execution_text.gd")
 const TYPES = {"bool":0,"int":1,"ref":2,"cell_ref":3,"effect":4}
 const COLORS = {"bool":Color("bb9bd9"),"int":Color("e6ba72"),"ref":Color("9ac490"),"cell_ref":Color("71c9d2"),"effect":Color("f0b17b")}
-const TITLES = {"param":"公开参数","bool":"开关常量","int":"数值常量","is_night":"是否夜晚","is_ambient_dark":"环境是否昏暗","read_state":"读取自身状态","neighbor":"相邻造物","exists":"造物存在","neighbor_water":"相邻环境水","water_exists":"水源存在","water_units":"读取水量","lt":"小于比较","min":"取较小值","add":"相加","sub":"相减","and":"同时满足","not":"条件取反","set_light":"设置发光","move":"移动一格","take_water":"从造物取水","take_environment_water":"从环境取水","release_environment_water":"排水到环境","call":"调用已发布模块"}
+const TITLES = {"cell_empty":"相邻格可用","terrain_is":"相邻地形匹配","form_material":"凝结地块","recover_material":"回收地块水","param":"公开参数","bool":"开关常量","int":"数值常量","is_night":"是否夜晚","is_ambient_dark":"环境是否昏暗","read_state":"读取自身状态","neighbor":"相邻造物","exists":"造物存在","neighbor_water":"相邻环境水","water_exists":"水源存在","water_units":"读取水量","lt":"小于比较","min":"取较小值","add":"相加","sub":"相减","and":"同时满足","not":"条件取反","set_light":"设置发光","move":"移动一格","take_water":"从造物取水","take_environment_water":"从环境取水","release_environment_water":"排水到环境","call":"调用已发布模块"}
 const PORTS = {"when":"执行条件","value":"值 / 条件","a":"输入 A","b":"输入 B","source":"来源","amount":"数量"}
 var document=Document.new()
 var runtime
@@ -57,7 +57,7 @@ func _ready() -> void:
 	content.add_child(Style.label("起始结构 · 可以拆开重组",14,Style.MUTED))
 	var start_row:=HBoxContainer.new();content.add_child(start_row)
 	preset_box=OptionButton.new();preset_box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	for text in ["限量吸水","暗处发光","向右排水","空白规则"]:preset_box.add_item(text)
+	for text in ["限量吸水","暗处发光","向右排水","空白规则","向上凝结地块","向上回收地块水"]:preset_box.add_item(text)
 	start_row.add_child(preset_box);start_row.add_child(Style.button("载入草稿",_preset_selected))
 	var rate_row:=HBoxContainer.new();content.add_child(rate_row)
 	rate_row.add_child(Style.label("每次取 / 排水",14,Style.MUTED))
@@ -99,7 +99,7 @@ func configure(r, id: String, display_name: String) -> void:
 	else: document.preset("pump",int(amount.value))
 	_positions.clear();_refresh()
 func _preset_selected() -> void:
-	var kinds: Array=["pump","lamp","release","blank"]
+	var kinds: Array=["pump","lamp","release","blank","form","recover"]
 	_result(document.preset(kinds[preset_box.selected],int(amount.value)))
 	_positions.clear()
 func _rate_changed(value: float) -> void:
@@ -124,8 +124,8 @@ func _refresh() -> void:
 	var groups: Array=[[],[],[]]
 	for n in m.get("nodes",[]):
 		var title: String=TITLES.get(n.op,n.op)
-		if n.op in ["set_light","move","take_water","take_environment_water","release_environment_water","call"]:groups[2].append(title)
-		elif n.op in ["lt","min","add","sub","and","not","exists","water_exists"]:groups[1].append(title)
+		if n.op in ["set_light","move","take_water","take_environment_water","release_environment_water","form_material","recover_material","call"]:groups[2].append(title)
+		elif n.op in ["lt","min","add","sub","and","not","exists","water_exists","cell_empty","terrain_is"]:groups[1].append(title)
 		else:groups[0].append(title)
 	for index in 3:
 		var card:=PanelContainer.new();card.add_theme_stylebox_override("panel",Style.box(Style.BG,Style.EDGE,8,10));cards.add_child(card)
@@ -190,6 +190,8 @@ func _default_config(op: String) -> Dictionary:
 		"bool":return {"value":true}
 		"read_state":return {"field":"water_units"}
 		"neighbor":return {"material":""}
+		"cell_empty":return {"dx":0,"dy":-1}
+		"terrain_is","form_material","recover_material":return {"dx":0,"dy":-1,"material":"core:water_crystal"}
 		"move","release_environment_water":return {"dx":1,"dy":0}
 		"call":
 			if runtime!=null and not runtime._program.source.modules.is_empty():
@@ -274,6 +276,25 @@ func _config_ui(n: GraphNode,data: Dictionary) -> void:
 			for name in ["向右","向左","向上","向下"]:o.add_item(name)
 			o.select(maxi(0,values.find(Vector2i(data.config.dx,data.config.dy))));n.add_child(o)
 			o.item_selected.connect(func(idx: int):_result(document.change_config(id,{"dx":values[idx].x,"dy":values[idx].y})))
+		"cell_empty","terrain_is","form_material","recover_material":
+			var direction:=OptionButton.new();var directions:Array=[Vector2i.UP,Vector2i.RIGHT,Vector2i.DOWN,Vector2i.LEFT]
+			for name in ["向上","向右","向下","向左"]:direction.add_item(name)
+			direction.select(maxi(0,directions.find(Vector2i(data.config.dx,data.config.dy))));n.add_child(direction)
+			direction.item_selected.connect(func(index:int):
+				var config:Dictionary=document.node(id).config.duplicate(true);config.dx=directions[index].x;config.dy=directions[index].y
+				_result(document.change_config(id,config)))
+			if data.op!="cell_empty":
+				var material_box:=OptionButton.new();var materials:Array=[]
+				for material_id in runtime._catalog.materials:
+					var definition:Dictionary=runtime._catalog.materials[material_id]
+					if definition.get("stackable")!=true:continue
+					if data.op!="terrain_is" and Codec.bound_water_cost(definition)<=0:continue
+					materials.append(material_id);material_box.add_item("凝水晶 · 500 水" if material_id=="core:water_crystal" else material_id)
+				material_box.select(maxi(0,materials.find(data.config.material)));material_box.disabled=materials.is_empty();n.add_child(material_box)
+				material_box.item_selected.connect(func(index:int):
+					var config:Dictionary=document.node(id).config.duplicate(true);config.material=materials[index]
+					_result(document.change_config(id,config)))
+				n.add_child(Style.note("凝结扣除封存水；回收返还。目标/容量失败时整组不提交。"))
 		"call":
 			var o:=OptionButton.new();var modules: Array=runtime._program.source.modules.duplicate(true)
 			for j in modules.size():

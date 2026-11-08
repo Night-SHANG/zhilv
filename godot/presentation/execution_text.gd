@@ -1,6 +1,10 @@
 extends RefCounted
 ## 诊断文案只解释实际报告，不能生成玩法状态或把计划当提交。
 const ERRORS:Dictionary={
+	"formation_target_occupied":"凝结位置被地形、造物、角色或残水占用",
+	"recover_material_mismatch":"相邻格不是指定的可回收材料",
+	"material_not_formable":"材料没有受信的凝结能力，不能凭空造出石头",
+	"invalid_material_direction":"需要选择相邻的一格，不能斜向或越格操作",
 	"rule_move_collision":"移动目标被地形、角色、其他造物或水占用",
 	"occupied_cell":"目标格已被占用",
 	"insufficient_water_or_capacity":"来源水量不足，或接收容器容量不足",

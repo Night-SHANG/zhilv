@@ -153,6 +153,12 @@ func mine(cell: Vector2i) -> Dictionary:
 	if not _terrain.has(cell):
 		return Codec.reject("not_static_terrain")
 	var stage = _staged_store()
+	var cost: int = material_water_cost(_terrain[cell])
+	if cost > 0:
+		if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
+		var tiles: Dictionary = _terrain.duplicate(); tiles.erase(cell)
+		var water: Dictionary = _water.duplicate(); water[cell] = cost
+		return _commit(stage, tiles, _snapshot.actor.duplicate(true), [cell], water)
 	var added: Dictionary = stage.change_stack(_terrain[cell], 1)
 	if not added.ok:
 		return added
@@ -259,6 +265,7 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 		return {"ok": true, "error": ""}
 	var stage = _staged_store()
 	var water: Dictionary = _water.duplicate()
+	var terrain: Dictionary = _terrain.duplicate()
 	var changed: Array = []
 	for command in commands:
 		if not command is Dictionary or not command.get("op") is String:
@@ -277,7 +284,7 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 				if not Codec._shape(command, ["op", "dx", "dy"]) or typeof(command.dx) != TYPE_INT or typeof(command.dy) != TYPE_INT or command.dx < -1 or command.dx > 1 or command.dy < -1 or command.dy > 1 or absi(command.dx) + absi(command.dy) != 1:
 					return Codec.reject("invalid_rule_move")
 				var target: Vector2i = cell + Vector2i(command.dx, command.dy)
-				if _terrain.has(target) or _actor_at(target) or int(water.get(target,0)) > 0:
+				if terrain.has(target) or _actor_at(target) or int(water.get(target,0)) > 0:
 					return Codec.reject("rule_move_collision")
 				result = stage.move_world(self_id, target)
 				if not changed.has(target):
@@ -306,13 +313,31 @@ func apply_rule_commands(self_id: String, commands: Variant) -> Dictionary:
 					target = cell + Vector2i(command.dx,command.dy)
 				var delta: Vector2i = target - cell
 				if absi(delta.x)+absi(delta.y)!=1: return Codec.reject("environment_source_not_adjacent")
-				result = _exchange_water(stage,water,self_id,target,command.amount,command.op=="take_environment_water")
+				result = _exchange_water(stage,water,self_id,target,command.amount,command.op=="take_environment_water",terrain)
+				if not changed.has(target): changed.append(target)
+			"form_material", "recover_material":
+				if not WorldCodec.has_environment(_snapshot): return Codec.reject("environment_not_enabled")
+				if not Codec._shape(command,["op","dx","dy","material"]) or typeof(command.dx)!=TYPE_INT or typeof(command.dy)!=TYPE_INT or absi(command.dx)+absi(command.dy)!=1 or not command.material is String:
+					return Codec.reject("invalid_material_command")
+				var target: Vector2i = cell + Vector2i(command.dx,command.dy)
+				var cost: int = material_water_cost(command.material)
+				if cost <= 0: return Codec.reject("material_not_formable")
+				if not WorldCodec.in_bounds(target): return Codec.reject("coordinate_range")
+				if command.op == "form_material":
+					if terrain.has(target) or stage.instance_at(target)!="" or _actor_at(target) or int(water.get(target,0))>0: return Codec.reject("formation_target_occupied")
+					if terrain.size() >= WorldCodec.MAX_TERRAIN: return Codec.reject("terrain_budget")
+					result = stage._change_water(self_id,-cost)
+					if result.ok: terrain[target] = command.material
+				else:
+					if terrain.get(target,"") != command.material: return Codec.reject("recover_material_mismatch")
+					result = stage._change_water(self_id,cost)
+					if result.ok: terrain.erase(target)
 				if not changed.has(target): changed.append(target)
 			_:
 				return Codec.reject("forbidden_rule_command")
 		if not result.ok:
 			return result
-	return _commit(stage, _terrain, _snapshot.actor.duplicate(true), changed, water if WorldCodec.has_environment(_snapshot) else null)
+	return _commit(stage, terrain, _snapshot.actor.duplicate(true), changed, water if WorldCodec.has_environment(_snapshot) else null)
 
 func _prepare_rule_revision(versions: Dictionary, snapshot: Dictionary) -> Dictionary:
 	## 可信宿主内部接口：规则运行时已完成引用/权限检查；材料能力保持原目录。
@@ -345,8 +370,18 @@ func water_at(cell: Vector2i) -> int:
 func water_cells() -> Array:
 	return _water.keys()
 
-func total_water_units() -> int:
+func material_water_cost(id: String) -> int:
+	return maxi(0,Codec.bound_water_cost(_catalog.materials.get(id)))
+
+func bound_water_units() -> int:
 	var total: int = 0
+	for material in _terrain.values(): total += material_water_cost(material)
+	for id in _snapshot.get("entities",{}).get("stacks",{}):
+		total += material_water_cost(id) * _store.stack_count(id)
+	return total
+
+func total_water_units() -> int:
+	var total: int = bound_water_units()
 	for amount in _water.values(): total += amount
 	for entity in _snapshot.get("entities",{}).get("instances",[]): total += entity.state.water_units
 	return total
@@ -356,10 +391,11 @@ func enable_environment() -> Dictionary:
 	if WorldCodec.has_environment(_snapshot): return {"ok":true,"error":""}
 	return _commit(_staged_store(),_terrain,_snapshot.actor.duplicate(true),[],{})
 
-func _exchange_water(stage, water: Dictionary, id: String, cell: Vector2i, amount: Variant, collect: bool) -> Dictionary:
+func _exchange_water(stage, water: Dictionary, id: String, cell: Vector2i, amount: Variant, collect: bool, terrain_override: Variant = null) -> Dictionary:
+	var terrain: Dictionary = _terrain if terrain_override == null else terrain_override
 	if typeof(amount) != TYPE_INT or amount < 1 or amount > WorldCodec.CELL_WATER_CAPACITY or not WorldCodec.in_bounds(cell):
 		return Codec.reject("invalid_environment_transfer")
-	if _terrain.has(cell) or stage.instance_at(cell) != "": return Codec.reject("solid_water_target")
+	if terrain.has(cell) or stage.instance_at(cell) != "": return Codec.reject("solid_water_target")
 	var units: int = int(water.get(cell,0))
 	if (collect and units < amount) or (not collect and units + amount > WorldCodec.CELL_WATER_CAPACITY):
 		return Codec.reject("environment_water_or_capacity")

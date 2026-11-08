@@ -68,7 +68,7 @@ func _build_ui() -> void:
 	var row:=HBoxContainer.new();row.add_theme_constant_override("separation",16);header.add_child(row)
 	row.add_child(Style.label("织律",29,Style.GOLD))
 	var brand:=VBoxContainer.new();brand.add_theme_constant_override("separation",0);row.add_child(brand)
-	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.16 · 开发构建",12,Style.MUTED))
+	brand.add_child(Style.label("RULEWEAVER",12,Style.MUTED));brand.add_child(Style.label("v0.17 · 开发构建",12,Style.MUTED))
 	var spacer:=Control.new();spacer.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(spacer)
 	_clock_label=Style.label("第 1 日 · 白昼",14);row.add_child(_clock_label)
 	_pause_button=Style.button("开始探索",_toggle_pause);_pause_button.name="PauseButton";row.add_child(_pause_button)
@@ -151,7 +151,7 @@ func _refresh_hud() -> void:
 	var detail: String="B 打开背包制作与选择造物"
 	if not item.is_empty():
 		detail="%s · 水量 %d / %d · %s"%[Recipes.label(item),item.state.water_units,item.state.capacity_units,"背包中" if item.location.kind=="inventory" else "世界中"]
-	_inventory_label.text="石块 %d   |   %s"%[world.stack_count("core:stone"),detail]
+	_inventory_label.text="石块 %d   |   %s"%[world.stack_count("core:stone"),detail]+("   |   地块封水 %d"%world.bound_water_units() if world.bound_water_units()>0 else "")
 	var feedback:Dictionary=runtime.execution_feedback(selected_id) if not item.is_empty() else {}
 	_feedback_label.text=Feedback.live(feedback)
 	_feedback_label.visible=not _feedback_label.text.is_empty()
@@ -187,7 +187,7 @@ func act_cell(cell: Vector2i,button: int=MOUSE_BUTTON_LEFT,shift: bool=false) ->
 	var occupant: String=world.instance_at(cell)
 	if button==MOUSE_BUTTON_LEFT and tool=="select":
 		if not occupant.is_empty():select_item(occupant);return {"ok":true,"error":"","message":"已选择 "+Recipes.label(world.get_instance(occupant))}
-		return {"ok":true,"error":"","message":"此格水量 %d；选择挖掘、放置或取水工具进行操作。"%world.water_at(cell)}
+		return {"ok":true,"error":"","message":"此格游离水 %d，地块封存水 %d。敲碎凝水晶会释放水，不掉落重复资源。"%[world.water_at(cell),world.material_water_cost(world.material_at(cell))]}
 	var pos: Array=[cell.x,cell.y]
 	if button==MOUSE_BUTTON_RIGHT:
 		if not occupant.is_empty():return play.command({"op":"pickup","id":occupant})

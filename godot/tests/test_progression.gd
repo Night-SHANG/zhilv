@@ -68,5 +68,5 @@ func _run()->void:
 	w.load_checkpoint(JSON.stringify(incomplete));supply.attach(r,w,{"id":"scenario:supply2","version":1,"objectives":[{"id":"goal:supply","type":"supply","requires":[],"cell":[1,0],"water_units":100}]})
 	supply.act({"op":"place","id":"creation:arbitrary","cell":[1,0]})
 	check(supply.status().completed.is_empty(),"insufficient_station_water_does_not_complete")
-	check(Loader.load_scenario("res://content/fresh_expedition.json").expedition.status().total==4,"default_scene_exposes_next_section")
+	check(Loader.load_scenario("res://content/fresh_expedition.json").expedition.status().total==5,"default_scene_exposes_next_section")
 	finish()

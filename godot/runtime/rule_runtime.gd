@@ -74,10 +74,11 @@ func _advance(night: bool, per_instance_budget: int, total_budget: int) -> Dicti
 	var refs: Dictionary = _references(_program, snapshot)
 	if not refs.ok:
 		return refs
-	var view: Dictionary = {"instances": {}, "cells": {}, "water":{}, "roofs":{}}
+	var view: Dictionary = {"instances": {}, "cells": {}, "water":{}, "roofs":{}, "terrain":{}, "actor_cells":WorldCodec.actor_cells(snapshot.actor)}
 	for entry in snapshot.get("water",[]):
 		view.water[Vector2i(entry.cell[0],entry.cell[1])] = entry.units
 	for tile in snapshot.terrain:
+		view.terrain[Vector2i(tile.cell[0],tile.cell[1])]=tile.material_id
 		var x: int = tile.cell[0]
 		view.roofs[x] = mini(int(view.roofs.get(x,1000001)),int(tile.cell[1]))
 	var active: Array = []

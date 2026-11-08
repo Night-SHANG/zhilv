@@ -10,6 +10,9 @@ static func evaluate(world, expedition)->Dictionary:
 	if goal.is_empty():return result
 	if goal.has("cell"):result.markers.append({"cell":Vector2i(goal.cell[0],goal.cell[1]),"label":"探索目标"})
 	match goal.id:
+		"goal:high_observatory":
+			result.stage="ascent";result.title="凝水造路 · 高处观测点"
+			result.detail="回收原容器和灯。用储水凝出台阶，或用石块搭台，照亮并到达 (0,-3)。每块凝水晶封存 500 水，可回收。"
 		"goal:lower_archive":
 			result.stage="lower";result.title="继续探索 · 下层回廊"
 			result.detail="回收或再制作夜灯，挖开 (6,1) 附近地板；照亮并到达下层 (6,2)。"

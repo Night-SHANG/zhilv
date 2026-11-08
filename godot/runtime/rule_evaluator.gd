@@ -1,12 +1,15 @@
 extends RefCounted
 ## 只读快照求值；本对象绝不持有WorldSession，也不修改世界。
 const Codec = preload("res://runtime/snapshot_codec.gd")
+const WorldCodec = preload("res://runtime/world_codec.gd")
 const Compiler = preload("res://runtime/rule_compiler.gd")
 var _modules: Dictionary
 var _entity: Dictionary
 var _cells: Dictionary
 var _instances: Dictionary
 var _water: Dictionary
+var _terrain: Dictionary
+var _actor_cells: Array
 var _roofs: Dictionary
 var _night: bool
 var _budget: int
@@ -24,6 +27,8 @@ func run(program: Dictionary, entity: Dictionary, view: Dictionary, night: bool,
 	_instances = view.instances
 	_water = view.get("water",{})
 	_roofs = view.get("roofs",{})
+	_terrain = view.get("terrain",{})
+	_actor_cells = view.get("actor_cells",[])
 	_night = night
 	_budget = budget
 	_spent = 0
@@ -95,6 +100,8 @@ func _execute(module_key: String, overrides: Dictionary, depth: int) -> void:
 					_error = "invalid_water_amount"
 					return
 				_commands.append({"op":"release_environment_water","dx":n.config.dx,"dy":n.config.dy,"amount":args.amount})
+			"form_material", "recover_material":
+				_commands.append({"op":n.op,"dx":n.config.dx,"dy":n.config.dy,"material":n.config.material})
 			"call":
 				_execute(Compiler.key(n.config.id, n.config.version), args, depth + 1)
 		if _commands.size() > 64:
@@ -125,6 +132,11 @@ func _value(module_key: String, id: String, parameters: Dictionary, cache: Dicti
 			value = _night
 		"is_ambient_dark":
 			value = _night or int(_roofs.get(int(_entity.location.cell[0]),1000001)) < int(_entity.location.cell[1])
+		"cell_empty", "terrain_is":
+			var cell := Vector2i(_entity.location.cell[0],_entity.location.cell[1]) + Vector2i(n.config.dx,n.config.dy)
+			if n.op=="cell_empty":
+				value=WorldCodec.in_bounds(cell) and not _terrain.has(cell) and not _cells.has(cell) and not _actor_cells.has(cell) and int(_water.get(cell,0))==0
+			else: value=_terrain.get(cell,"")==n.config.material
 		"neighbor_water":
 			value = null
 			var cell := Vector2i(_entity.location.cell[0],_entity.location.cell[1])
